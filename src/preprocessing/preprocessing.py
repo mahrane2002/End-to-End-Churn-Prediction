@@ -1,49 +1,37 @@
 
-"""
-preprocessing.py
-----------------
-Preprocessing pipeline for the Bank Customer Churn Prediction project.
+"""Data preprocessing module for the Bank Customer Churn Prediction project.
 
 Responsibilities:
-    - Remove identifier and non-predictive columns.
-    - Separate features and target.
-    - Split data into training and test sets.
-    - Impute missing values.
-    - Handle numerical outliers.
-    - Scale numerical features.
-    - One-hot encode categorical features.
-    - Save the fitted preprocessor for later inference.
+- Remove identifier and non-predictive columns.
+- Separate features and target.
+- Split data into training and test sets.
+- Impute missing values.
+- Handle numerical outliers.
+- Scale numerical features.
+- One-hot encode categorical features.
 
 Important:
-    The preprocessor is fitted only on the training data to prevent
-    data leakage.
+The preprocessing transformer is fitted only on the training data
+to prevent data leakage.
 
-    SMOTETomek is intentionally NOT applied here. It should be applied
-    only to the training data inside the model training pipeline.
 """
 
-from pathlib import Path
 from typing import Tuple
 
-import joblib
 import pandas as pd
 
+from feature_engine.outliers import Winsorizer
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from feature_engine.outliers import Winsorizer
-
 from src.config.config import (
-    ARTIFACT_DIR,
-    PREPROCESSOR_PATH,
     RANDOM_STATE,
     TARGET_COLUMN,
     TEST_SIZE,
 )
-from src.data.data_ingestion import load_data
 
 
 # ---------------------------------------------------------------------------
@@ -60,8 +48,7 @@ DROP_COLUMNS = [
 def split_features_target(
     df: pd.DataFrame,
 ) -> Tuple[pd.DataFrame, pd.Series]:
-    """
-    Separate input features from the target variable.
+    """Separate features from the target variable.
 
     Parameters
     ----------
@@ -74,11 +61,11 @@ def split_features_target(
         Features X and target y.
     """
 
-
+    # Separate features and target.
     X = df.drop(columns=[TARGET_COLUMN])
     y = df[TARGET_COLUMN]
 
-    # Remove identifiers and non-predictive text columns.
+    # Remove identifiers and non-predictive columns.
     X = X.drop(columns=DROP_COLUMNS, errors="ignore")
 
     return X, y
@@ -88,32 +75,32 @@ def create_preprocessor(
     numerical_features: list[str],
     categorical_features: list[str],
 ) -> ColumnTransformer:
-    """
-    Create the preprocessing pipeline.
+    """Create the preprocessing transformer.
 
     Numerical features:
-        1. Median imputation
-        2. Winsorization for extreme values
-        3. Standard scaling
+    - Median imputation
+    - Winsorization
+    - Standard scaling
 
     Categorical features:
-        1. Most-frequent imputation
-        2. One-hot encoding
+    - Most-frequent imputation
+    - One-hot encoding
 
     Parameters
     ----------
     numerical_features : list[str]
-        Numerical feature names.
+        Names of numerical features.
 
     categorical_features : list[str]
-        Categorical feature names.
+        Names of categorical features.
 
     Returns
     -------
     ColumnTransformer
-        Complete preprocessing transformer.
+        Configured preprocessing transformer.
     """
 
+    # Pipeline for numerical features.
     numerical_pipeline = Pipeline(
         steps=[
             (
@@ -135,6 +122,7 @@ def create_preprocessor(
         ]
     )
 
+    # Pipeline for categorical features.
     categorical_pipeline = Pipeline(
         steps=[
             (
@@ -151,6 +139,7 @@ def create_preprocessor(
         ]
     )
 
+    # Apply the appropriate pipeline to each feature type.
     preprocessor = ColumnTransformer(
         transformers=[
             (
@@ -172,13 +161,18 @@ def create_preprocessor(
 
 def preprocess_data(
     df: pd.DataFrame,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, ColumnTransformer]:
-    """
-    Prepare the dataset for model training.
+) -> Tuple[
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.Series,
+    pd.Series,
+    ColumnTransformer,
+]:
+    """Preprocess the dataset for model training.
 
-    The train/test split is performed BEFORE fitting the preprocessing
+    The train/test split is performed before fitting the preprocessing
     transformer. This prevents information from the test set from
-    influencing imputation, outlier capping, scaling, or encoding.
+    influencing imputation, outlier handling, scaling, or encoding.
 
     Parameters
     ----------
@@ -192,7 +186,7 @@ def preprocess_data(
         X_test_processed,
         y_train,
         y_test,
-        fitted_preprocessor
+        fitted_preprocessor.
     """
 
     # -----------------------------------------------------------------------
@@ -202,7 +196,7 @@ def preprocess_data(
     X, y = split_features_target(df)
 
     # -----------------------------------------------------------------------
-    # 2. Train/test split
+    # 2. Split data into training and test sets
     # -----------------------------------------------------------------------
 
     X_train, X_test, y_train, y_test = train_test_split(
@@ -226,7 +220,7 @@ def preprocess_data(
     ).columns.tolist()
 
     # -----------------------------------------------------------------------
-    # 4. Create preprocessing pipeline
+    # 4. Create the preprocessing transformer
     # -----------------------------------------------------------------------
 
     preprocessor = create_preprocessor(
@@ -235,7 +229,7 @@ def preprocess_data(
     )
 
     # -----------------------------------------------------------------------
-    # 5. Fit ONLY on training data
+    # 5. Fit only on training data
     # -----------------------------------------------------------------------
 
     X_train_processed = preprocessor.fit_transform(X_train)
@@ -247,7 +241,7 @@ def preprocess_data(
     X_test_processed = preprocessor.transform(X_test)
 
     # -----------------------------------------------------------------------
-    # 7. Recover feature names
+    # 7. Recover transformed feature names
     # -----------------------------------------------------------------------
 
     feature_names = preprocessor.get_feature_names_out()
@@ -271,53 +265,3 @@ def preprocess_data(
         y_test,
         preprocessor,
     )
-
-
-def save_preprocessor(
-    preprocessor: ColumnTransformer,
-    output_path: Path = PREPROCESSOR_PATH,
-) -> None:
-    """
-    Save the fitted preprocessing transformer.
-
-    Saving the preprocessor ensures that the exact same transformations
-    learned during training can be applied during inference.
-    """
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    joblib.dump(preprocessor, output_path)
-
-    print(f"Preprocessor saved to: {output_path}")
-
-
-def run_preprocessing():
-    """
-    Execute the complete preprocessing workflow.
-    """
-
-    # Load data through the ingestion module.
-    df = load_data()
-
-    # Preprocess data.
-    (
-        X_train,
-        X_test,
-        y_train,
-        y_test,
-        preprocessor,
-    ) = preprocess_data(df)
-
-    # Save fitted preprocessor for inference.
-    save_preprocessor(preprocessor)
-
-    print("Preprocessing completed successfully.")
-    print(f"Training data shape: {X_train.shape}")
-    print(f"Test data shape: {X_test.shape}")
-
-    return X_train, X_test, y_train, y_test
-
-
-if __name__ == "__main__":
-    run_preprocessing()
-```
