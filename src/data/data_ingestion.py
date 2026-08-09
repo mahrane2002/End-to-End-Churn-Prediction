@@ -15,7 +15,3 @@ def load_data(file_path: Union[str, Path] = RAW_DATA_PATH) -> pd.DataFrame:
         df = df.rename(columns={ORIGINAL_TARGET_COLUMN: TARGET_COLUMN})
     return df
 
-
-if __name__ == "__main__":
-    df = load_data()
-    print(f"Data loaded successfully with shape: {df.shape}")
