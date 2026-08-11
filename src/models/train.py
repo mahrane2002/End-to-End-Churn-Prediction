@@ -1,14 +1,9 @@
-
 """Model training module for the Bank Customer Churn Prediction project."""
 
 import pandas as pd
-from xgboost import XGBClassifier
 
-from src.data.data_ingestion import load_data
-from src.data.data_validation import validate_data
-from src.preprocessing.feature_engineering import engineer_features
-from src.preprocessing.preprocessing import preprocess_data
-from src.preprocessing.feature_selection import select_features
+from imblearn.combine import SMOTETomek
+from xgboost import XGBClassifier
 
 
 def train_model(
@@ -17,6 +12,10 @@ def train_model(
 ) -> XGBClassifier:
     """
     Train the XGBoost churn prediction model.
+
+    SMOTETomek is applied only to the training data
+    to handle class imbalance without contaminating
+    the test set.
 
     Parameters
     ----------
@@ -32,6 +31,23 @@ def train_model(
         Trained XGBoost model.
     """
 
+    # ------------------------------------------------------------------
+    # 1. Handle class imbalance
+    # ------------------------------------------------------------------
+
+    sampler = SMOTETomek(
+        random_state=42,
+    )
+
+    X_train_resampled, y_train_resampled = sampler.fit_resample(
+        X_train,
+        y_train,
+    )
+
+    # ------------------------------------------------------------------
+    # 2. Define XGBoost model
+    # ------------------------------------------------------------------
+
     model = XGBClassifier(
         n_estimators=200,
         max_depth=4,
@@ -42,6 +58,13 @@ def train_model(
         eval_metric="logloss",
     )
 
-    model.fit(X_train, y_train)
+    # ------------------------------------------------------------------
+    # 3. Train model on resampled training data
+    # ------------------------------------------------------------------
+
+    model.fit(
+        X_train_resampled,
+        y_train_resampled,
+    )
 
     return model
