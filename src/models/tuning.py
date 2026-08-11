@@ -1,16 +1,4 @@
-
-"""Hyperparameter tuning module for the Bank Customer Churn Prediction project.
-
-This module performs Bayesian hyperparameter optimization of the XGBoost
-classifier using Optuna and Stratified K-Fold cross-validation.
-
-The tuning strategy follows the production notebook:
-- Optuna TPE sampler
-- Stratified 5-Fold cross-validation
-- ROC-AUC as optimization metric
-- SMOTETomek applied independently inside each CV fold
-- XGBoost classifier
-"""
+"""Hyperparameter tuning module for the Bank Customer Churn Prediction project."""
 
 from typing import Any
 
@@ -19,12 +7,11 @@ import optuna
 import pandas as pd
 
 from imblearn.combine import SMOTETomek
-from sklearn.base import clone
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold
 from xgboost import XGBClassifier
 
-from src.config.config import CV_FOLDS, RANDOM_STATE, SCORING_METRIC
+from src.config.config import CV_FOLDS, RANDOM_STATE
 
 
 def objective(
@@ -32,15 +19,11 @@ def objective(
     X_train: pd.DataFrame,
     y_train: pd.Series,
 ) -> float:
-    """Optuna objective function.
+    """
+    Optuna objective function for XGBoost hyperparameter optimization.
 
-    Each Optuna trial:
-    1. Samples XGBoost hyperparameters.
-    2. Performs Stratified K-Fold cross-validation.
-    3. Applies SMOTETomek only on each training fold.
-    4. Trains XGBoost on the resampled fold.
-    5. Evaluates ROC-AUC on the untouched validation fold.
-    6. Returns the mean CV ROC-AUC.
+    SMOTETomek is applied only to the training portion of each
+    cross-validation fold. The validation fold remains untouched.
 
     Parameters
     ----------
@@ -48,7 +31,7 @@ def objective(
         Current Optuna trial.
 
     X_train : pd.DataFrame
-        Selected training features.
+        Training features.
 
     y_train : pd.Series
         Training target.
@@ -60,7 +43,7 @@ def objective(
     """
 
     # ------------------------------------------------------------------
-    # XGBoost hyperparameter search space
+    # 1. Hyperparameter search space
     # ------------------------------------------------------------------
 
     params = {
@@ -116,7 +99,7 @@ def objective(
     }
 
     # ------------------------------------------------------------------
-    # Stratified cross-validation
+    # 2. Stratified K-Fold cross-validation
     # ------------------------------------------------------------------
 
     cv = StratifiedKFold(
@@ -128,7 +111,7 @@ def objective(
     fold_scores = []
 
     # ------------------------------------------------------------------
-    # Cross-validation
+    # 3. Cross-validation
     # ------------------------------------------------------------------
 
     for fold, (train_idx, val_idx) in enumerate(
@@ -142,8 +125,7 @@ def objective(
         y_fold_val = y_train.iloc[val_idx]
 
         # --------------------------------------------------------------
-        # Apply SMOTETomek ONLY to the training fold.
-        # The validation fold must remain untouched.
+        # SMOTETomek ONLY on the training fold
         # --------------------------------------------------------------
 
         sampler = SMOTETomek(
@@ -156,7 +138,7 @@ def objective(
         )
 
         # --------------------------------------------------------------
-        # Train XGBoost
+        # 4. Create XGBoost model
         # --------------------------------------------------------------
 
         model = XGBClassifier(
@@ -167,13 +149,17 @@ def objective(
             n_jobs=-1,
         )
 
+        # --------------------------------------------------------------
+        # 5. Train on resampled training fold
+        # --------------------------------------------------------------
+
         model.fit(
             X_fold_resampled,
             y_fold_resampled,
         )
 
         # --------------------------------------------------------------
-        # Evaluate on untouched validation fold
+        # 6. Evaluate on untouched validation fold
         # --------------------------------------------------------------
 
         y_val_proba = model.predict_proba(
@@ -188,7 +174,7 @@ def objective(
         fold_scores.append(fold_auc)
 
         # --------------------------------------------------------------
-        # Optuna pruning
+        # 7. Optuna pruning
         # --------------------------------------------------------------
 
         mean_score = float(np.mean(fold_scores))
@@ -201,6 +187,10 @@ def objective(
         if trial.should_prune():
             raise optuna.TrialPruned()
 
+    # ------------------------------------------------------------------
+    # 8. Return mean CV ROC-AUC
+    # ------------------------------------------------------------------
+
     return float(np.mean(fold_scores))
 
 
@@ -209,12 +199,13 @@ def tune_model(
     y_train: pd.Series,
     n_trials: int = 50,
 ) -> tuple[dict[str, Any], float, optuna.Study]:
-    """Optimize XGBoost hyperparameters using Optuna.
+    """
+    Optimize XGBoost hyperparameters using Optuna.
 
     Parameters
     ----------
     X_train : pd.DataFrame
-        Selected training features.
+        Training features.
 
     y_train : pd.Series
         Training target.
@@ -225,18 +216,18 @@ def tune_model(
     Returns
     -------
     tuple
-        best_params:
+        best_params :
             Best XGBoost hyperparameters.
 
-        best_score:
-            Best mean CV ROC-AUC.
+        best_score :
+            Best mean cross-validation ROC-AUC.
 
-        study:
+        study :
             Completed Optuna study.
     """
 
     # ------------------------------------------------------------------
-    # TPE sampler
+    # 1. Create Optuna sampler
     # ------------------------------------------------------------------
 
     sampler = optuna.samplers.TPESampler(
@@ -244,7 +235,7 @@ def tune_model(
     )
 
     # ------------------------------------------------------------------
-    # Create optimization study
+    # 2. Create optimization study
     # ------------------------------------------------------------------
 
     study = optuna.create_study(
@@ -254,7 +245,7 @@ def tune_model(
     )
 
     # ------------------------------------------------------------------
-    # Run optimization
+    # 3. Run optimization
     # ------------------------------------------------------------------
 
     study.optimize(
@@ -267,36 +258,12 @@ def tune_model(
         show_progress_bar=True,
     )
 
+    # ------------------------------------------------------------------
+    # 4. Return best result
+    # ------------------------------------------------------------------
+
     return (
         study.best_params,
         study.best_value,
         study,
     )
-
-
-def build_tuned_model(
-    best_params: dict[str, Any],
-) -> XGBClassifier:
-    """Build the final XGBoost model using optimized parameters.
-
-    Parameters
-    ----------
-    best_params : dict
-        Hyperparameters returned by Optuna.
-
-    Returns
-    -------
-    XGBClassifier
-        Configured XGBoost model.
-    """
-
-    model = XGBClassifier(
-        **best_params,
-        objective="binary:logistic",
-        eval_metric="logloss",
-        random_state=RANDOM_STATE,
-        n_jobs=-1,
-    )
-
-    return model
-
