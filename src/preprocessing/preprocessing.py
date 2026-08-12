@@ -15,11 +15,10 @@ The train/test split is performed exclusively in main.py.
 
 import pandas as pd
 
-from feature_engine.outliers import Winsorizer
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder
 
 
 # ---------------------------------------------------------------------------
@@ -64,19 +63,7 @@ def create_preprocessor(
             (
                 "imputer",
                 SimpleImputer(strategy="median"),
-            ),
-            (
-                "winsorizer",
-                Winsorizer(
-                    capping_method="iqr",
-                    tail="both",
-                    fold=1.5,
-                ),
-            ),
-            (
-                "scaler",
-                StandardScaler(),
-            ),
+            )
         ]
     )
 

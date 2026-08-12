@@ -1,5 +1,7 @@
 """Main entry point for the Bank Customer Churn Prediction project."""
 
+from sklearn.model_selection import train_test_split
+
 from src.config.config import (
     RANDOM_STATE,
     TARGET_COLUMN,
@@ -10,9 +12,8 @@ from src.data.data_validation import validate_data
 from src.models.train import train_model
 from src.models.tuning import tune_model
 from src.preprocessing.feature_engineering import engineer_features
+from src.preprocessing.feature_selection import select_features
 from src.preprocessing.preprocessing import preprocess_data
-
-from sklearn.model_selection import train_test_split
 
 
 def main() -> dict:
@@ -22,7 +23,7 @@ def main() -> dict:
     -------
     dict
         Dictionary containing the trained model, preprocessing
-        transformer, test data, and tuning results.
+        transformer, feature selector, test data, and tuning results.
     """
 
     # ==============================================================
@@ -77,7 +78,7 @@ def main() -> dict:
     #
     # IMPORTANT:
     # The test set is isolated before feature engineering,
-    # preprocessing, tuning, and training.
+    # preprocessing, tuning, feature selection, and training.
     # ==============================================================
 
     print("\n" + "=" * 70)
@@ -101,7 +102,6 @@ def main() -> dict:
     # 5. Feature engineering
     #
     # Feature engineering is applied separately to train and test.
-    #
     # No statistics are learned from the test set.
     # ==============================================================
 
@@ -112,8 +112,15 @@ def main() -> dict:
     X_train = engineer_features(X_train)
     X_test = engineer_features(X_test)
 
-    print(f"X_train after feature engineering: {X_train.shape}")
-    print(f"X_test after feature engineering:  {X_test.shape}")
+    print(
+        f"X_train after feature engineering: "
+        f"{X_train.shape}"
+    )
+
+    print(
+        f"X_test after feature engineering:  "
+        f"{X_test.shape}"
+    )
 
     # ==============================================================
     # 6. Hyperparameter tuning
@@ -132,7 +139,7 @@ def main() -> dict:
     #       ↓
     #   ROC-AUC
     #
-    # No feature selection is performed.
+    # Feature selection is NOT performed during tuning.
     # ==============================================================
 
     print("\n" + "=" * 70)
@@ -146,6 +153,7 @@ def main() -> dict:
     )
 
     print("\nBest parameters:")
+
     for parameter, value in best_params.items():
         print(f"  {parameter}: {value}")
 
@@ -154,7 +162,7 @@ def main() -> dict:
     # ==============================================================
     # 7. Final preprocessing
     #
-    # The preprocessor is now fitted on the COMPLETE training set.
+    # The preprocessor is fitted on the COMPLETE training set.
     #
     # X_test is only transformed.
     # ==============================================================
@@ -183,19 +191,58 @@ def main() -> dict:
     )
 
     # ==============================================================
-    # 8. Final model training
+    # 8. Final feature selection
     #
-    # train_model applies SMOTETomek ONLY to X_train.
+    # A simple XGBoost-based feature selection is applied.
     #
-    # The test set is NOT used here.
+    # IMPORTANT:
+    # The selector is fitted ONLY on X_train.
+    # X_test is only transformed using the selected features.
     # ==============================================================
 
     print("\n" + "=" * 70)
-    print("8. Final model training")
+    print("8. Final feature selection")
+    print("=" * 70)
+
+    (
+        X_train_selected,
+        X_test_selected,
+        selector,
+    ) = select_features(
+        X_train=X_train_processed,
+        y_train=y_train,
+        X_test=X_test_processed,
+    )
+
+    print(
+        f"X_train after feature selection: "
+        f"{X_train_selected.shape}"
+    )
+
+    print(
+        f"X_test after feature selection:  "
+        f"{X_test_selected.shape}"
+    )
+
+    print(
+        f"Number of selected features: "
+        f"{X_train_selected.shape[1]}"
+    )
+
+    # ==============================================================
+    # 9. Final model training
+    #
+    # train_model applies SMOTETomek ONLY to X_train_selected.
+    #
+    # X_test_selected is NOT used during training.
+    # ==============================================================
+
+    print("\n" + "=" * 70)
+    print("9. Final model training")
     print("=" * 70)
 
     model = train_model(
-        X_train=X_train_processed,
+        X_train=X_train_selected,
         y_train=y_train,
         best_params=best_params,
     )
@@ -203,7 +250,7 @@ def main() -> dict:
     print("Final XGBoost model trained successfully.")
 
     # ==============================================================
-    # 9. Return pipeline artifacts
+    # 10. Return pipeline artifacts
     # ==============================================================
 
     print("\n" + "=" * 70)
@@ -213,10 +260,11 @@ def main() -> dict:
     return {
         "model": model,
         "preprocessor": preprocessor,
+        "selector": selector,
         "best_params": best_params,
         "best_score": best_score,
         "study": study,
-        "X_test": X_test_processed,
+        "X_test": X_test_selected,
         "y_test": y_test,
     }
 
