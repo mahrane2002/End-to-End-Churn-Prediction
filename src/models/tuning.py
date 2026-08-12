@@ -12,6 +12,7 @@ from sklearn.model_selection import StratifiedKFold
 from xgboost import XGBClassifier
 
 from src.config.config import CV_FOLDS, RANDOM_STATE
+from src.preprocessing.feature_selection import select_features
 from src.preprocessing.preprocessing import create_preprocessor
 
 
@@ -19,29 +20,10 @@ def _preprocess_fold(
     X_fold_train: pd.DataFrame,
     X_fold_val: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Preprocess one cross-validation fold.
+    """Preprocess one CV fold.
 
     The preprocessor is fitted only on the training fold.
-    The validation fold is transformed using the fitted
-    preprocessor.
-
-    Parameters
-    ----------
-    X_fold_train : pd.DataFrame
-        Training portion of the fold.
-
-    X_fold_val : pd.DataFrame
-        Validation portion of the fold.
-
-    Returns
-    -------
-    tuple[pd.DataFrame, pd.DataFrame]
-        Preprocessed training and validation data.
     """
-
-    # ==============================================================
-    # 1. Identify feature types from training fold only
-    # ==============================================================
 
     numerical_features = X_fold_train.select_dtypes(
         include=["int64", "float64"]
@@ -51,34 +33,20 @@ def _preprocess_fold(
         include=["object", "category", "bool"]
     ).columns.tolist()
 
-    # ==============================================================
-    # 2. Create preprocessing transformer
-    # ==============================================================
-
     preprocessor = create_preprocessor(
         numerical_features=numerical_features,
         categorical_features=categorical_features,
     )
 
-    # ==============================================================
-    # 3. Fit ONLY on training fold
-    # ==============================================================
-
+    # Fit ONLY on fold training data
     X_fold_train_processed = preprocessor.fit_transform(
         X_fold_train
     )
 
-    # ==============================================================
-    # 4. Transform validation fold
-    # ==============================================================
-
+    # Transform validation data
     X_fold_val_processed = preprocessor.transform(
         X_fold_val
     )
-
-    # ==============================================================
-    # 5. Recover transformed feature names
-    # ==============================================================
 
     feature_names = preprocessor.get_feature_names_out()
 
@@ -105,36 +73,18 @@ def objective(
     X_train: pd.DataFrame,
     y_train: pd.Series,
 ) -> float:
-    """Optuna objective function for XGBoost hyperparameter optimization.
-
-    Cross-validation is performed using only the training data.
+    """Optuna objective using leakage-free cross-validation.
 
     For every fold:
-    - preprocessing is fitted only on the training fold;
-    - the validation fold is only transformed;
-    - SMOTETomek is applied only to the training fold;
-    - XGBoost is trained on the resampled training fold;
-    - ROC-AUC is evaluated on the untouched validation fold.
 
-    No feature selection is performed in this project.
-    XGBoost uses the complete engineered feature set.
-
-    Parameters
-    ----------
-    trial : optuna.Trial
-        Current Optuna trial.
-
-    X_train : pd.DataFrame
-        Training features after feature engineering
-        and before preprocessing.
-
-    y_train : pd.Series
-        Training target.
-
-    Returns
-    -------
-    float
-        Mean cross-validation ROC-AUC.
+    1. Split training and validation fold.
+    2. Fit preprocessing on training fold only.
+    3. Transform validation fold.
+    4. Fit feature selection on training fold only.
+    5. Transform validation fold using the fitted selector.
+    6. Apply SMOTETomek only to the training fold.
+    7. Train XGBoost.
+    8. Evaluate ROC-AUC on untouched validation data.
     """
 
     # ==============================================================
@@ -213,6 +163,7 @@ def objective(
         cv.split(X_train, y_train),
         start=1,
     ):
+
         # ----------------------------------------------------------
         # Split fold
         # ----------------------------------------------------------
@@ -225,9 +176,6 @@ def objective(
 
         # ----------------------------------------------------------
         # Preprocessing
-        #
-        # IMPORTANT:
-        # The preprocessor is fitted ONLY on the training fold.
         # ----------------------------------------------------------
 
         (
@@ -239,11 +187,29 @@ def objective(
         )
 
         # ----------------------------------------------------------
+        # Feature Selection
+        #
+        # IMPORTANT:
+        # The selector is fitted ONLY on the fold training data.
+        #
+        # The validation fold is NEVER used to choose features.
+        # ----------------------------------------------------------
+
+        (
+            X_fold_train_selected,
+            X_fold_val_selected,
+            _,
+        ) = select_features(
+            X_train=X_fold_train_processed,
+            y_train=y_fold_train,
+            X_test=X_fold_val_processed,
+        )
+
+        # ----------------------------------------------------------
         # SMOTETomek
         #
         # IMPORTANT:
-        # Applied ONLY to the training fold.
-        # The validation fold remains untouched.
+        # Applied ONLY to the selected training fold.
         # ----------------------------------------------------------
 
         sampler = SMOTETomek(
@@ -254,7 +220,7 @@ def objective(
             X_fold_resampled,
             y_fold_resampled,
         ) = sampler.fit_resample(
-            X_fold_train_processed,
+            X_fold_train_selected,
             y_fold_train,
         )
 
@@ -284,7 +250,7 @@ def objective(
         # ----------------------------------------------------------
 
         y_val_proba = model.predict_proba(
-            X_fold_val_processed
+            X_fold_val_selected
         )[:, 1]
 
         fold_auc = roc_auc_score(
@@ -298,7 +264,9 @@ def objective(
         # Optuna pruning
         # ----------------------------------------------------------
 
-        mean_score = float(np.mean(fold_scores))
+        mean_score = float(
+            np.mean(fold_scores)
+        )
 
         trial.report(
             mean_score,
@@ -309,67 +277,34 @@ def objective(
             raise optuna.TrialPruned()
 
     # ==============================================================
-    # 4. Return mean CV ROC-AUC
+    # 4. Mean CV ROC-AUC
     # ==============================================================
 
-    return float(np.mean(fold_scores))
+    return float(
+        np.mean(fold_scores)
+    )
 
 
 def tune_model(
     X_train: pd.DataFrame,
     y_train: pd.Series,
     n_trials: int = 50,
-) -> tuple[dict[str, Any], float, optuna.Study]:
-    """Optimize XGBoost hyperparameters using Optuna.
-
-    The optimization is performed only on the training data.
-
-    Parameters
-    ----------
-    X_train : pd.DataFrame
-        Training features after feature engineering
-        and before preprocessing.
-
-    y_train : pd.Series
-        Training target.
-
-    n_trials : int, default=50
-        Number of Optuna trials.
-
-    Returns
-    -------
-    tuple
-        best_params :
-            Best XGBoost hyperparameters.
-
-        best_score :
-            Best mean cross-validation ROC-AUC.
-
-        study :
-            Completed Optuna study.
-    """
-
-    # ==============================================================
-    # 1. Optuna sampler
-    # ==============================================================
+) -> tuple[
+    dict[str, Any],
+    float,
+    optuna.Study,
+]:
+    """Optimize XGBoost hyperparameters using Optuna."""
 
     sampler = optuna.samplers.TPESampler(
         seed=RANDOM_STATE,
     )
-
-    # ==============================================================
-    # 2. Create study
-    # ==============================================================
 
     study = optuna.create_study(
         direction="maximize",
         sampler=sampler,
         study_name="xgboost_churn_optimization",
     )
-
-    # ==============================================================
-    # 3. Run optimization
-    # ==============================================================
 
     study.optimize(
         lambda trial: objective(
@@ -380,10 +315,6 @@ def tune_model(
         n_trials=n_trials,
         show_progress_bar=True,
     )
-
-    # ==============================================================
-    # 4. Return best result
-    # ==============================================================
 
     return (
         study.best_params,

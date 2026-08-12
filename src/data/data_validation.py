@@ -45,36 +45,29 @@ def validate_data(df: pd.DataFrame) -> bool:
 
     # Check that the dataset is not empty.
     if df.empty:
-        print("Validation failed: dataset is empty.")
-        return False
+        raise ValueError("Validation failed: dataset is empty.")
 
     # Check that all expected columns are present.
     missing_columns = set(EXPECTED_COLUMNS) - set(df.columns)
 
     if missing_columns:
-        print(f"Validation failed: missing columns: {missing_columns}")
-        return False
+        raise ValueError(f"Validation failed: missing required columns: {missing_columns}")
 
     # Check that the target column exists.
     if TARGET_COLUMN not in df.columns:
-        print(f"Validation failed: target column '{TARGET_COLUMN}' is missing.")
-        return False
+        raise ValueError(f"Validation failed: missing required columns: {{'{TARGET_COLUMN}'}}")
 
     # Check that the target contains only binary values.
     target_values = set(df[TARGET_COLUMN].dropna().unique())
 
     if not target_values.issubset({0, 1}):
-        print(
-            f"Validation failed: invalid target values: {target_values}"
-        )
-        return False
+        raise ValueError(f"Validation failed: invalid target values: {target_values}")
 
     # Check for duplicate rows.
     duplicate_count = df.duplicated().sum()
 
     if duplicate_count > 0:
-        print(f"Validation failed: {duplicate_count} duplicate rows found.")
-        return False
+        raise ValueError(f"Validation failed: {duplicate_count} duplicate rows found.")
 
     # Report missing values without modifying the data.
     missing_values = df.isnull().sum()

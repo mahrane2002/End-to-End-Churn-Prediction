@@ -19,15 +19,7 @@ from src.preprocessing.preprocessing import preprocess_data
 
 
 def main() -> dict:
-    """Run the complete churn prediction pipeline.
-
-    Returns
-    -------
-    dict
-        Dictionary containing the trained model, preprocessing
-        transformer, feature selector, predictions, evaluation
-        metrics, and tuning results.
-    """
+    """Run the complete churn prediction pipeline."""
 
     # ==============================================================
     # 1. Load data
@@ -73,15 +65,8 @@ def main() -> dict:
     X = df.drop(columns=[TARGET_COLUMN])
     y = df[TARGET_COLUMN]
 
-    print(f"Features shape: {X.shape}")
-    print(f"Target shape: {y.shape}")
-
     # ==============================================================
     # 4. Train / Test split
-    #
-    # IMPORTANT:
-    # The test set is isolated before feature engineering,
-    # preprocessing, feature selection, tuning, and training.
     # ==============================================================
 
     print("\n" + "=" * 70)
@@ -98,8 +83,6 @@ def main() -> dict:
 
     print(f"X_train shape: {X_train.shape}")
     print(f"X_test shape:  {X_test.shape}")
-    print(f"y_train shape: {y_train.shape}")
-    print(f"y_test shape:  {y_test.shape}")
 
     # ==============================================================
     # 5. Feature Engineering
@@ -123,14 +106,56 @@ def main() -> dict:
     )
 
     # ==============================================================
-    # 6. Preprocessing
+    # 6. Hyperparameter Tuning
     #
-    # The preprocessor is fitted on X_train only.
+    # IMPORTANT:
+    # Do NOT perform feature selection here beforehand.
+    #
+    # tune_model() performs:
+    #
+    # fold split
+    #     ↓
+    # preprocessing
+    #     ↓
+    # feature selection
+    #     ↓
+    # SMOTETomek
+    #     ↓
+    # XGBoost
+    #
+    # Feature selection is therefore fitted independently
+    # inside every CV fold.
+    # ==============================================================
+
+    print("\n" + "=" * 70)
+    print("6. Hyperparameter tuning")
+    print("=" * 70)
+
+    best_params, best_score, study = tune_model(
+        X_train=X_train,
+        y_train=y_train,
+        n_trials=50,
+    )
+
+    print("\nBest parameters:")
+
+    for parameter, value in best_params.items():
+        print(f"  {parameter}: {value}")
+
+    print(
+        f"\nBest mean CV ROC-AUC: "
+        f"{best_score:.4f}"
+    )
+
+    # ==============================================================
+    # 7. Final preprocessing
+    #
+    # This preprocessing is fitted on the complete X_train.
     # X_test is only transformed.
     # ==============================================================
 
     print("\n" + "=" * 70)
-    print("6. Final preprocessing")
+    print("7. Final preprocessing")
     print("=" * 70)
 
     (
@@ -153,16 +178,20 @@ def main() -> dict:
     )
 
     # ==============================================================
-    # 7. Feature Selection
+    # 8. Final Feature Selection
     #
     # IMPORTANT:
-    # The selector is fitted ONLY on X_train.
+    # This is the FINAL selector.
     #
-    # X_test is never used to determine which features to keep.
+    # It is fitted on the complete X_train only.
+    # X_test is only transformed.
+    #
+    # This selector is NOT used to perform CV.
+    # CV already performed its own selection inside each fold.
     # ==============================================================
 
     print("\n" + "=" * 70)
-    print("7. Feature selection")
+    print("8. Final feature selection")
     print("=" * 70)
 
     (
@@ -191,45 +220,7 @@ def main() -> dict:
     )
 
     # ==============================================================
-    # 8. Hyperparameter Tuning
-    #
-    # IMPORTANT:
-    # Tuning is performed AFTER feature selection.
-    #
-    # Only X_train_selected is used by Optuna.
-    # X_test_selected remains untouched.
-    # ==============================================================
-
-    print("\n" + "=" * 70)
-    print("8. Hyperparameter tuning")
-    print("=" * 70)
-
-    best_params, best_score, study = tune_model(
-        X_train=X_train_selected,
-        y_train=y_train,
-        n_trials=50,
-    )
-
-    print("\nBest parameters:")
-
-    for parameter, value in best_params.items():
-        print(f"  {parameter}: {value}")
-
-    print(
-        f"\nBest mean CV ROC-AUC: "
-        f"{best_score:.4f}"
-    )
-
-    # ==============================================================
     # 9. Final Model Training
-    #
-    # The model is trained using:
-    #   - selected features
-    #   - best hyperparameters
-    #   - training data only
-    #
-    # SMOTETomek is applied inside train_model() only to
-    # the training data.
     # ==============================================================
 
     print("\n" + "=" * 70)
@@ -242,14 +233,12 @@ def main() -> dict:
         best_params=best_params,
     )
 
-    print("Final XGBoost model trained successfully.")
+    print(
+        "Final XGBoost model trained successfully."
+    )
 
     # ==============================================================
     # 10. Prediction
-    #
-    # IMPORTANT:
-    # The test set is used for prediction only after all
-    # training-related steps are finished.
     # ==============================================================
 
     print("\n" + "=" * 70)
@@ -267,13 +256,9 @@ def main() -> dict:
     )
 
     print("Predictions generated successfully.")
-    print(f"Number of predictions: {len(y_pred)}")
 
     # ==============================================================
-    # 11. Model Evaluation
-    #
-    # evaluate.py receives the predictions generated by predict.py.
-    # It does NOT generate predictions itself.
+    # 11. Evaluation
     # ==============================================================
 
     print("\n" + "=" * 70)
@@ -287,7 +272,7 @@ def main() -> dict:
     )
 
     # ==============================================================
-    # 12. Return pipeline artifacts
+    # 12. Return artifacts
     # ==============================================================
 
     print("\n" + "=" * 70)
@@ -295,27 +280,26 @@ def main() -> dict:
     print("=" * 70)
 
     return {
-        # Final model
         "model": model,
 
-        # Preprocessing and feature selection
         "preprocessor": preprocessor,
+
         "selector": selector,
 
-        # Hyperparameter tuning
         "best_params": best_params,
+
         "best_score": best_score,
+
         "study": study,
 
-        # Test data
         "X_test": X_test_selected,
+
         "y_test": y_test,
 
-        # Predictions
         "y_pred": y_pred,
+
         "y_proba": y_proba,
 
-        # Evaluation
         "metrics": metrics,
     }
 
