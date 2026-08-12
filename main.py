@@ -2,7 +2,10 @@
 
 from sklearn.model_selection import train_test_split
 
-from src.config.config import RANDOM_STATE, TEST_SIZE
+from src.config.config import (
+    RANDOM_STATE,
+    TEST_SIZE,
+)
 
 from src.data.data_ingestion import load_data
 from src.data.data_validation import validate_data
@@ -15,7 +18,7 @@ from src.models.tuning import tune_model
 from src.models.train import train_model
 
 
-def main() -> None:
+def main() -> dict:
     """Run the complete churn prediction training pipeline."""
 
     # ==============================================================
@@ -70,7 +73,43 @@ def main() -> None:
     )
 
     # ==============================================================
-    # 6. PREPROCESSING
+    # 6. HYPERPARAMETER TUNING
+    #
+    # IMPORTANT:
+    # X_train is passed BEFORE preprocessing.
+    #
+    # Inside tuning.py:
+    #
+    # Fold
+    #   -> preprocessing.fit(train_fold)
+    #   -> preprocessing.transform(validation_fold)
+    #   -> SMOTETomek(train_fold)
+    #   -> XGBoost
+    #   -> validation
+    #
+    # Feature selection is NOT performed here.
+    # ==============================================================
+
+    best_params, best_score, study = tune_model(
+        X_train=X_train,
+        y_train=y_train,
+        n_trials=50,
+    )
+
+    print(
+        f"Best CV ROC-AUC: {best_score:.4f}"
+    )
+
+    print(
+        "Best parameters:",
+        best_params,
+    )
+
+    # ==============================================================
+    # 7. FINAL PREPROCESSING
+    #
+    # Now that tuning is finished, preprocessing can be fitted
+    # on the complete training set.
     # ==============================================================
 
     (
@@ -83,7 +122,12 @@ def main() -> None:
     )
 
     # ==============================================================
-    # 7. FEATURE SELECTION
+    # 8. FINAL FEATURE SELECTION
+    #
+    # RFECV is executed ONLY here.
+    #
+    # It uses the complete training set.
+    # The test set is only transformed.
     # ==============================================================
 
     (
@@ -96,21 +140,17 @@ def main() -> None:
         X_test=X_test_processed,
     )
 
-    # ==============================================================
-    # 8. HYPERPARAMETER TUNING
-    # ==============================================================
-
-    best_params, best_score, study = tune_model(
-        X_train=X_train_selected,
-        y_train=y_train,
-        n_trials=50,
+    print(
+        f"Selected features: "
+        f"{X_train_selected.shape[1]}"
     )
-
-    print("Best CV ROC-AUC:", best_score)
-    print("Best parameters:", best_params)
 
     # ==============================================================
     # 9. FINAL TRAINING
+    #
+    # train.py applies SMOTETomek only to training data.
+    #
+    # best_params comes from Optuna.
     # ==============================================================
 
     model = train_model(
@@ -119,7 +159,9 @@ def main() -> None:
         best_params=best_params,
     )
 
-    print("Final model trained successfully.")
+    print(
+        "Final model trained successfully."
+    )
 
     # ==============================================================
     # 10. RETURN OBJECTS
