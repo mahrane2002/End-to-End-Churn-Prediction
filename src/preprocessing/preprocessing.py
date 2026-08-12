@@ -1,10 +1,6 @@
-
 """Data preprocessing module for the Bank Customer Churn Prediction project.
 
 Responsibilities:
-- Remove identifier and non-predictive columns.
-- Separate features and target.
-- Split data into training and test sets.
 - Impute missing values.
 - Handle numerical outliers.
 - Scale numerical features.
@@ -14,62 +10,21 @@ Important:
 The preprocessing transformer is fitted only on the training data
 to prevent data leakage.
 
+The train/test split is performed exclusively in main.py.
 """
-
-from typing import Tuple
 
 import pandas as pd
 
 from feature_engine.outliers import Winsorizer
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
-from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from src.config.config import (
-    RANDOM_STATE,
-    TARGET_COLUMN,
-    TEST_SIZE,
-)
-
 
 # ---------------------------------------------------------------------------
-# Columns that should not be used as predictive features
+# Create preprocessing transformer
 # ---------------------------------------------------------------------------
-
-DROP_COLUMNS = [
-    "RowNumber",
-    "CustomerId",
-    "Surname",
-]
-
-
-def split_features_target(
-    df: pd.DataFrame,
-) -> Tuple[pd.DataFrame, pd.Series]:
-    """Separate features from the target variable.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Validated churn dataset.
-
-    Returns
-    -------
-    Tuple[pd.DataFrame, pd.Series]
-        Features X and target y.
-    """
-
-    # Separate features and target.
-    X = df.drop(columns=[TARGET_COLUMN])
-    y = df[TARGET_COLUMN]
-
-    # Remove identifiers and non-predictive columns.
-    X = X.drop(columns=DROP_COLUMNS, errors="ignore")
-
-    return X, y
-
 
 def create_preprocessor(
     numerical_features: list[str],
@@ -100,7 +55,10 @@ def create_preprocessor(
         Configured preprocessing transformer.
     """
 
-    # Pipeline for numerical features.
+    # -----------------------------------------------------------------------
+    # Numerical pipeline
+    # -----------------------------------------------------------------------
+
     numerical_pipeline = Pipeline(
         steps=[
             (
@@ -122,7 +80,10 @@ def create_preprocessor(
         ]
     )
 
-    # Pipeline for categorical features.
+    # -----------------------------------------------------------------------
+    # Categorical pipeline
+    # -----------------------------------------------------------------------
+
     categorical_pipeline = Pipeline(
         steps=[
             (
@@ -139,7 +100,10 @@ def create_preprocessor(
         ]
     )
 
-    # Apply the appropriate pipeline to each feature type.
+    # -----------------------------------------------------------------------
+    # Combine pipelines
+    # -----------------------------------------------------------------------
+
     preprocessor = ColumnTransformer(
         transformers=[
             (
@@ -159,56 +123,62 @@ def create_preprocessor(
     return preprocessor
 
 
+# ---------------------------------------------------------------------------
+# Preprocess train and test data
+# ---------------------------------------------------------------------------
+
 def preprocess_data(
-    df: pd.DataFrame,
-) -> Tuple[
+    X_train: pd.DataFrame,
+    X_test: pd.DataFrame,
+) -> tuple[
     pd.DataFrame,
     pd.DataFrame,
-    pd.Series,
-    pd.Series,
     ColumnTransformer,
 ]:
-    """Preprocess the dataset for model training.
+    """Preprocess training and test datasets.
 
-    The train/test split is performed before fitting the preprocessing
-    transformer. This prevents information from the test set from
-    influencing imputation, outlier handling, scaling, or encoding.
+    The preprocessing transformer is fitted only on X_train.
+    X_test is transformed using the fitted transformer.
 
     Parameters
     ----------
-    df : pd.DataFrame
-        Validated input dataset.
+    X_train : pd.DataFrame
+        Training features.
+
+    X_test : pd.DataFrame
+        Test features.
 
     Returns
     -------
-    Tuple
-        X_train_processed,
-        X_test_processed,
-        y_train,
-        y_test,
-        fitted_preprocessor.
+    tuple
+        X_train_processed :
+            Preprocessed training features.
+
+        X_test_processed :
+            Preprocessed test features.
+
+        preprocessor :
+            Fitted preprocessing transformer.
     """
 
     # -----------------------------------------------------------------------
-    # 1. Separate features and target
+    # 1. Validate inputs
     # -----------------------------------------------------------------------
 
-    X, y = split_features_target(df)
+    if not isinstance(X_train, pd.DataFrame):
+        raise TypeError("X_train must be a pandas DataFrame.")
+
+    if not isinstance(X_test, pd.DataFrame):
+        raise TypeError("X_test must be a pandas DataFrame.")
+
+    if X_train.empty:
+        raise ValueError("X_train is empty.")
+
+    if X_test.empty:
+        raise ValueError("X_test is empty.")
 
     # -----------------------------------------------------------------------
-    # 2. Split data into training and test sets
-    # -----------------------------------------------------------------------
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
-        test_size=TEST_SIZE,
-        random_state=RANDOM_STATE,
-        stratify=y,
-    )
-
-    # -----------------------------------------------------------------------
-    # 3. Identify feature types
+    # 2. Identify feature types using training data only
     # -----------------------------------------------------------------------
 
     numerical_features = X_train.select_dtypes(
@@ -220,7 +190,7 @@ def preprocess_data(
     ).columns.tolist()
 
     # -----------------------------------------------------------------------
-    # 4. Create the preprocessing transformer
+    # 3. Create preprocessing transformer
     # -----------------------------------------------------------------------
 
     preprocessor = create_preprocessor(
@@ -229,22 +199,26 @@ def preprocess_data(
     )
 
     # -----------------------------------------------------------------------
-    # 5. Fit only on training data
+    # 4. Fit ONLY on training data
     # -----------------------------------------------------------------------
 
     X_train_processed = preprocessor.fit_transform(X_train)
 
     # -----------------------------------------------------------------------
-    # 6. Transform test data using the fitted transformer
+    # 5. Transform test data using the fitted transformer
     # -----------------------------------------------------------------------
 
     X_test_processed = preprocessor.transform(X_test)
 
     # -----------------------------------------------------------------------
-    # 7. Recover transformed feature names
+    # 6. Recover transformed feature names
     # -----------------------------------------------------------------------
 
     feature_names = preprocessor.get_feature_names_out()
+
+    # -----------------------------------------------------------------------
+    # 7. Convert transformed arrays back to DataFrames
+    # -----------------------------------------------------------------------
 
     X_train_processed = pd.DataFrame(
         X_train_processed,
@@ -261,7 +235,5 @@ def preprocess_data(
     return (
         X_train_processed,
         X_test_processed,
-        y_train,
-        y_test,
         preprocessor,
     )
