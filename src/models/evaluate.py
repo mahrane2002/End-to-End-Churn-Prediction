@@ -17,53 +17,34 @@ from sklearn.metrics import (
 
 
 def evaluate_model(
-    model: Any,
-    X_test: pd.DataFrame,
     y_test: pd.Series,
+    y_pred: np.ndarray,
+    y_proba: np.ndarray,
 ) -> dict[str, Any]:
     """
-    Evaluate the final churn prediction model on the test set.
-
-    The test set must remain completely untouched during:
-        - feature engineering
-        - preprocessing fitting
-        - feature selection fitting
-        - hyperparameter tuning
-        - model training
+    Evaluate model predictions on the test set.
 
     Parameters
     ----------
-    model : Any
-        Trained XGBoost classification model.
-
-    X_test : pd.DataFrame
-        Test features after the same preprocessing and feature
-        selection transformations used for the training data.
-
     y_test : pd.Series
-        True target values for the test set.
+        True target values.
+
+    y_pred : np.ndarray
+        Predicted class labels.
+
+    y_proba : np.ndarray
+        Predicted probabilities for the positive class.
 
     Returns
     -------
     dict[str, Any]
-        Dictionary containing the main classification metrics,
-        confusion matrix, and classification report.
+        Evaluation metrics and reports.
     """
 
-    # ------------------------------------------------------------------
-    # 1. Generate predictions
-    # ------------------------------------------------------------------
-
-    y_pred = model.predict(X_test)
-
-    # XGBoost returns probabilities for the positive class
-    y_proba = model.predict_proba(X_test)[:, 1]
-
-    # ------------------------------------------------------------------
-    # 2. Calculate metrics
-    # ------------------------------------------------------------------
-
-    accuracy = accuracy_score(y_test, y_pred)
+    accuracy = accuracy_score(
+        y_test,
+        y_pred,
+    )
 
     precision = precision_score(
         y_test,
@@ -88,18 +69,10 @@ def evaluate_model(
         y_proba,
     )
 
-    # ------------------------------------------------------------------
-    # 3. Confusion matrix
-    # ------------------------------------------------------------------
-
-    cm = confusion_matrix(
+    confusion = confusion_matrix(
         y_test,
         y_pred,
     )
-
-    # ------------------------------------------------------------------
-    # 4. Classification report
-    # ------------------------------------------------------------------
 
     report = classification_report(
         y_test,
@@ -107,23 +80,15 @@ def evaluate_model(
         zero_division=0,
     )
 
-    # ------------------------------------------------------------------
-    # 5. Store results
-    # ------------------------------------------------------------------
-
     metrics = {
         "accuracy": float(accuracy),
         "precision": float(precision),
         "recall": float(recall),
         "f1_score": float(f1),
         "roc_auc": float(roc_auc),
-        "confusion_matrix": cm.tolist(),
+        "confusion_matrix": confusion.tolist(),
         "classification_report": report,
     }
-
-    # ------------------------------------------------------------------
-    # 6. Display results
-    # ------------------------------------------------------------------
 
     print("\n" + "=" * 70)
     print("MODEL EVALUATION")
@@ -136,7 +101,7 @@ def evaluate_model(
     print(f"ROC-AUC  : {roc_auc:.4f}")
 
     print("\nConfusion Matrix:")
-    print(cm)
+    print(confusion)
 
     print("\nClassification Report:")
     print(report)
