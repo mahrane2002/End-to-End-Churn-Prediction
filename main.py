@@ -9,6 +9,8 @@ from src.config.config import (
 )
 from src.data.data_ingestion import load_data
 from src.data.data_validation import validate_data
+from src.models.evaluate import evaluate_model
+from src.models.predict import predict, predict_proba
 from src.models.train import train_model
 from src.models.tuning import tune_model
 from src.preprocessing.feature_engineering import engineer_features
@@ -23,7 +25,8 @@ def main() -> dict:
     -------
     dict
         Dictionary containing the trained model, preprocessing
-        transformer, feature selector, test data, and tuning results.
+        transformer, feature selector, predictions, evaluation
+        metrics, and tuning results.
     """
 
     # ==============================================================
@@ -191,10 +194,7 @@ def main() -> dict:
     # 8. Hyperparameter tuning
     #
     # IMPORTANT:
-    # Optuna is now performed AFTER feature selection.
-    #
-    # Therefore, the hyperparameters are optimized for the exact
-    # feature set that will be used by the final model.
+    # Tuning is performed AFTER feature selection.
     #
     # Only X_train_selected is used by Optuna.
     # X_test_selected remains completely untouched.
@@ -221,13 +221,12 @@ def main() -> dict:
     # 9. Final model training
     #
     # The model is trained using:
-    #
     #   - selected features
     #   - best hyperparameters
-    #   - X_train only
+    #   - training data only
     #
-    # SMOTETomek is applied inside train_model() only to the
-    # training data.
+    # SMOTETomek is applied inside train_model() only to
+    # the training data.
     # ==============================================================
 
     print("\n" + "=" * 70)
@@ -243,7 +242,49 @@ def main() -> dict:
     print("Final XGBoost model trained successfully.")
 
     # ==============================================================
-    # 10. Return pipeline artifacts
+    # 10. Prediction
+    #
+    # IMPORTANT:
+    # The test set is used here for the first time after
+    # all training-related steps are finished.
+    # ==============================================================
+
+    print("\n" + "=" * 70)
+    print("10. Prediction")
+    print("=" * 70)
+
+    y_pred = predict(
+        model=model,
+        X=X_test_selected,
+    )
+
+    y_proba = predict_proba(
+        model=model,
+        X=X_test_selected,
+    )
+
+    print("Predictions generated successfully.")
+
+    print(f"Number of predictions: {len(y_pred)}")
+
+    # ==============================================================
+    # 11. Model evaluation
+    #
+    # Evaluation is performed ONLY on the untouched test labels.
+    # ==============================================================
+
+    print("\n" + "=" * 70)
+    print("11. Model evaluation")
+    print("=" * 70)
+
+    metrics = evaluate_model(
+        model=model,
+        X_test=X_test_selected,
+        y_test=y_test,
+    )
+
+    # ==============================================================
+    # 12. Return pipeline artifacts
     # ==============================================================
 
     print("\n" + "=" * 70)
@@ -251,14 +292,28 @@ def main() -> dict:
     print("=" * 70)
 
     return {
+        # Final model
         "model": model,
+
+        # Preprocessing / feature selection
         "preprocessor": preprocessor,
         "selector": selector,
+
+        # Tuning
         "best_params": best_params,
         "best_score": best_score,
         "study": study,
+
+        # Test data
         "X_test": X_test_selected,
         "y_test": y_test,
+
+        # Predictions
+        "y_pred": y_pred,
+        "y_proba": y_proba,
+
+        # Evaluation
+        "metrics": metrics,
     }
 
 
