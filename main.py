@@ -78,7 +78,7 @@ def main() -> dict:
     #
     # IMPORTANT:
     # The test set is isolated before feature engineering,
-    # preprocessing, tuning, feature selection, and training.
+    # preprocessing, feature selection, tuning, and training.
     # ==============================================================
 
     print("\n" + "=" * 70)
@@ -99,10 +99,7 @@ def main() -> dict:
     print(f"y_test shape:  {y_test.shape}")
 
     # ==============================================================
-    # 5. Feature engineering
-    #
-    # Feature engineering is applied separately to train and test.
-    # No statistics are learned from the test set.
+    # 5. Feature Engineering
     # ==============================================================
 
     print("\n" + "=" * 70)
@@ -123,52 +120,14 @@ def main() -> dict:
     )
 
     # ==============================================================
-    # 6. Hyperparameter tuning
+    # 6. Final preprocessing
     #
-    # The tuning module performs:
-    #
-    #   Stratified K-Fold
-    #       ↓
-    #   preprocessing fitted on train fold
-    #       ↓
-    #   preprocessing transform validation fold
-    #       ↓
-    #   SMOTETomek on train fold only
-    #       ↓
-    #   XGBoost
-    #       ↓
-    #   ROC-AUC
-    #
-    # Feature selection is NOT performed during tuning.
-    # ==============================================================
-
-    print("\n" + "=" * 70)
-    print("6. Hyperparameter tuning")
-    print("=" * 70)
-
-    best_params, best_score, study = tune_model(
-        X_train=X_train,
-        y_train=y_train,
-        n_trials=50,
-    )
-
-    print("\nBest parameters:")
-
-    for parameter, value in best_params.items():
-        print(f"  {parameter}: {value}")
-
-    print(f"\nBest mean CV ROC-AUC: {best_score:.4f}")
-
-    # ==============================================================
-    # 7. Final preprocessing
-    #
-    # The preprocessor is fitted on the COMPLETE training set.
-    #
+    # The preprocessor is fitted on X_train only.
     # X_test is only transformed.
     # ==============================================================
 
     print("\n" + "=" * 70)
-    print("7. Final preprocessing")
+    print("6. Final preprocessing")
     print("=" * 70)
 
     (
@@ -191,17 +150,16 @@ def main() -> dict:
     )
 
     # ==============================================================
-    # 8. Final feature selection
-    #
-    # A simple XGBoost-based feature selection is applied.
+    # 7. Final Feature Selection
     #
     # IMPORTANT:
     # The selector is fitted ONLY on X_train.
-    # X_test is only transformed using the selected features.
+    #
+    # X_test is NEVER used to determine which features to keep.
     # ==============================================================
 
     print("\n" + "=" * 70)
-    print("8. Final feature selection")
+    print("7. Feature selection")
     print("=" * 70)
 
     (
@@ -230,11 +188,46 @@ def main() -> dict:
     )
 
     # ==============================================================
+    # 8. Hyperparameter tuning
+    #
+    # IMPORTANT:
+    # Optuna is now performed AFTER feature selection.
+    #
+    # Therefore, the hyperparameters are optimized for the exact
+    # feature set that will be used by the final model.
+    #
+    # Only X_train_selected is used by Optuna.
+    # X_test_selected remains completely untouched.
+    # ==============================================================
+
+    print("\n" + "=" * 70)
+    print("8. Hyperparameter tuning")
+    print("=" * 70)
+
+    best_params, best_score, study = tune_model(
+        X_train=X_train_selected,
+        y_train=y_train,
+        n_trials=50,
+    )
+
+    print("\nBest parameters:")
+
+    for parameter, value in best_params.items():
+        print(f"  {parameter}: {value}")
+
+    print(f"\nBest mean CV ROC-AUC: {best_score:.4f}")
+
+    # ==============================================================
     # 9. Final model training
     #
-    # train_model applies SMOTETomek ONLY to X_train_selected.
+    # The model is trained using:
     #
-    # X_test_selected is NOT used during training.
+    #   - selected features
+    #   - best hyperparameters
+    #   - X_train only
+    #
+    # SMOTETomek is applied inside train_model() only to the
+    # training data.
     # ==============================================================
 
     print("\n" + "=" * 70)
@@ -254,7 +247,7 @@ def main() -> dict:
     # ==============================================================
 
     print("\n" + "=" * 70)
-    print("Pipeline completed")
+    print("Pipeline completed successfully")
     print("=" * 70)
 
     return {

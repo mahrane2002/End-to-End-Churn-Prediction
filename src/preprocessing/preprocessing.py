@@ -2,8 +2,6 @@
 
 Responsibilities:
 - Impute missing values.
-- Handle numerical outliers.
-- Scale numerical features.
 - One-hot encode categorical features.
 
 Important:
@@ -33,8 +31,6 @@ def create_preprocessor(
 
     Numerical features:
     - Median imputation
-    - Winsorization
-    - Standard scaling
 
     Categorical features:
     - Most-frequent imputation
