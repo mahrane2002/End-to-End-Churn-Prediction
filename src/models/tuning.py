@@ -22,6 +22,8 @@ def _preprocess_fold(
     """Preprocess one cross-validation fold.
 
     The preprocessor is fitted only on the training fold.
+    The validation fold is transformed using the fitted
+    preprocessor.
 
     Parameters
     ----------
@@ -50,7 +52,7 @@ def _preprocess_fold(
     ).columns.tolist()
 
     # ==============================================================
-    # 2. Create preprocessor
+    # 2. Create preprocessing transformer
     # ==============================================================
 
     preprocessor = create_preprocessor(
@@ -75,7 +77,7 @@ def _preprocess_fold(
     )
 
     # ==============================================================
-    # 5. Recover feature names
+    # 5. Recover transformed feature names
     # ==============================================================
 
     feature_names = preprocessor.get_feature_names_out()
@@ -105,11 +107,17 @@ def objective(
 ) -> float:
     """Optuna objective function for XGBoost hyperparameter optimization.
 
-    Preprocessing and SMOTETomek are performed inside each
-    cross-validation fold to prevent data leakage.
+    Cross-validation is performed using only the training data.
 
-    Feature selection is intentionally NOT performed during tuning.
-    It is performed once after tuning on the complete training set.
+    For every fold:
+    - preprocessing is fitted only on the training fold;
+    - the validation fold is only transformed;
+    - SMOTETomek is applied only to the training fold;
+    - XGBoost is trained on the resampled training fold;
+    - ROC-AUC is evaluated on the untouched validation fold.
+
+    No feature selection is performed in this project.
+    XGBoost uses the complete engineered feature set.
 
     Parameters
     ----------
@@ -117,7 +125,8 @@ def objective(
         Current Optuna trial.
 
     X_train : pd.DataFrame
-        Training features before preprocessing.
+        Training features after feature engineering
+        and before preprocessing.
 
     y_train : pd.Series
         Training target.
@@ -194,7 +203,7 @@ def objective(
         random_state=RANDOM_STATE,
     )
 
-    fold_scores = []
+    fold_scores: list[float] = []
 
     # ==============================================================
     # 3. Cross-validation
@@ -204,7 +213,6 @@ def objective(
         cv.split(X_train, y_train),
         start=1,
     ):
-
         # ----------------------------------------------------------
         # Split fold
         # ----------------------------------------------------------
@@ -218,7 +226,8 @@ def objective(
         # ----------------------------------------------------------
         # Preprocessing
         #
-        # FIT only on training fold.
+        # IMPORTANT:
+        # The preprocessor is fitted ONLY on the training fold.
         # ----------------------------------------------------------
 
         (
@@ -232,7 +241,9 @@ def objective(
         # ----------------------------------------------------------
         # SMOTETomek
         #
-        # ONLY training fold.
+        # IMPORTANT:
+        # Applied ONLY to the training fold.
+        # The validation fold remains untouched.
         # ----------------------------------------------------------
 
         sampler = SMOTETomek(
@@ -287,9 +298,7 @@ def objective(
         # Optuna pruning
         # ----------------------------------------------------------
 
-        mean_score = float(
-            np.mean(fold_scores)
-        )
+        mean_score = float(np.mean(fold_scores))
 
         trial.report(
             mean_score,
@@ -303,9 +312,7 @@ def objective(
     # 4. Return mean CV ROC-AUC
     # ==============================================================
 
-    return float(
-        np.mean(fold_scores)
-    )
+    return float(np.mean(fold_scores))
 
 
 def tune_model(
@@ -315,10 +322,13 @@ def tune_model(
 ) -> tuple[dict[str, Any], float, optuna.Study]:
     """Optimize XGBoost hyperparameters using Optuna.
 
+    The optimization is performed only on the training data.
+
     Parameters
     ----------
     X_train : pd.DataFrame
-        Training features before preprocessing.
+        Training features after feature engineering
+        and before preprocessing.
 
     y_train : pd.Series
         Training target.
