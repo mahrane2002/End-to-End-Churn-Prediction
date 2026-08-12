@@ -2,12 +2,9 @@
 
 import pandas as pd
 
-from src.config.config import TARGET_COLUMN
-
 
 def create_features(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Create meaningful features for churn prediction.
+    """Create meaningful features for churn prediction.
 
     The function only creates new features.
     Data cleaning, imputation, scaling, and encoding
@@ -16,7 +13,7 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
     Parameters
     ----------
     df : pd.DataFrame
-        Input dataset.
+        Input feature dataset.
 
     Returns
     -------
@@ -30,7 +27,10 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
     # 1. Balance relative to estimated age
     # ------------------------------------------------------------------
 
-    data["BalancePerAge"] = data["Balance"] / data["Age"].replace(0, 1)
+    data["BalancePerAge"] = (
+        data["Balance"]
+        / data["Age"].replace(0, 1)
+    )
 
     # ------------------------------------------------------------------
     # 2. Estimated customer activity
@@ -46,7 +46,8 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
     # ------------------------------------------------------------------
 
     data["IsActiveAndHasCard"] = (
-        data["IsActiveMember"] * data["HasCrCard"]
+        data["IsActiveMember"]
+        * data["HasCrCard"]
     )
 
     # ------------------------------------------------------------------
@@ -70,7 +71,9 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
     # 5. Balance status
     # ------------------------------------------------------------------
 
-    data["HasBalance"] = (data["Balance"] > 0).astype(int)
+    data["HasBalance"] = (
+        data["Balance"] > 0
+    ).astype(int)
 
     # ------------------------------------------------------------------
     # 6. Product usage indicator
@@ -86,13 +89,12 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
 def engineer_features(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """
-    Validate the input and create engineered features.
+    """Validate the input and create engineered features.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input churn dataset.
+        Input feature dataset.
 
     Returns
     -------
@@ -100,15 +102,26 @@ def engineer_features(
         Dataset with engineered features.
     """
 
+    # ------------------------------------------------------------------
+    # 1. Validate input type
+    # ------------------------------------------------------------------
+
     if not isinstance(df, pd.DataFrame):
-        raise TypeError("Input data must be a pandas DataFrame.")
+        raise TypeError(
+            "Input data must be a pandas DataFrame."
+        )
+
+    # ------------------------------------------------------------------
+    # 2. Validate that the DataFrame is not empty
+    # ------------------------------------------------------------------
 
     if df.empty:
-        raise ValueError("Input DataFrame is empty.")
-
-    if TARGET_COLUMN not in df.columns:
         raise ValueError(
-            f"Target column '{TARGET_COLUMN}' is missing."
+            "Input DataFrame is empty."
         )
+
+    # ------------------------------------------------------------------
+    # 3. Create engineered features
+    # ------------------------------------------------------------------
 
     return create_features(df)
