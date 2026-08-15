@@ -119,9 +119,4 @@ def engineer_features(
         raise ValueError(
             "Input DataFrame is empty."
         )
-
-    # ------------------------------------------------------------------
-    # 3. Create engineered features
-    # ------------------------------------------------------------------
-
     return create_features(df)
