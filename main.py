@@ -10,6 +10,11 @@ from src.config.config import (
 from src.data.data_ingestion import load_data
 from src.data.data_validation import validate_data
 from src.models.evaluate import evaluate_model
+from src.models.explain import (
+    create_shap_explainer,
+    explain_global,
+    explain_customer,
+)
 from src.models.predict import predict, predict_proba
 from src.models.train import train_model
 from src.models.tuning import tune_model
@@ -18,7 +23,7 @@ from src.preprocessing.feature_selection import select_features
 from src.preprocessing.preprocessing import preprocess_data
 
 
-def main() -> dict:
+def main(customer_index: int | None = None) -> dict:
     """Run the complete churn prediction pipeline."""
 
     # ==============================================================
@@ -272,7 +277,52 @@ def main() -> dict:
     )
 
     # ==============================================================
-    # 12. Return artifacts
+    # 12. SHAP Explainability
+    #
+    # IMPORTANT:
+    # SHAP is applied to the final trained XGBoost model.
+    #
+    # The explanation data is X_test_selected, which corresponds
+    # exactly to the features received by the final XGBoost model.
+    #
+    # SMOTETomek is NOT applied to X_test.
+    #
+    # The prediction threshold remains 0.5.
+    # ==============================================================
+
+    print("\n" + "=" * 70)
+    print("12. SHAP explainability")
+    print("=" * 70)
+
+    explainer = create_shap_explainer(model)
+
+    shap_results = explain_global(
+        explainer=explainer,
+        X=X_test_selected,
+    )
+
+    print(
+        "Global SHAP explanations generated successfully."
+    )
+
+    customer_explanation = None
+
+    if customer_index is not None:
+        customer_explanation = explain_customer(
+            explainer=explainer,
+            model=model,
+            X=X_test_selected,
+            customer_index=customer_index,
+            threshold=0.5,
+        )
+
+        print(
+            f"SHAP explanation generated for customer "
+            f"index {customer_index}."
+        )
+
+    # ==============================================================
+    # 13. Return artifacts
     # ==============================================================
 
     print("\n" + "=" * 70)
@@ -301,6 +351,12 @@ def main() -> dict:
         "y_proba": y_proba,
 
         "metrics": metrics,
+
+        "shap_explainer": explainer,
+
+        "shap_results": shap_results,
+
+        "customer_explanation": customer_explanation,
     }
 
 
