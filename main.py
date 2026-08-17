@@ -1,5 +1,6 @@
 """Main entry point for the Bank Customer Churn Prediction project."""
 
+from datetime import datetime
 from sklearn.model_selection import train_test_split
 
 from src.config.config import (
@@ -11,7 +12,7 @@ from src.data.data_ingestion import load_data
 from src.data.data_validation import validate_data
 from src.models.evaluate import evaluate_model
 from src.models.explain import (
-    create_shap_explainer,
+    create_tree_explainer,
     explain_global,
     explain_customer,
 )
@@ -21,6 +22,12 @@ from src.models.tuning import tune_model
 from src.preprocessing.feature_engineering import engineer_features
 from src.preprocessing.feature_selection import select_features
 from src.preprocessing.preprocessing import preprocess_data
+from src.utils.artifact_manager import (
+    save_model,
+    save_preprocessor,
+    save_selector,
+    save_metadata,
+)
 
 
 def main(customer_index: int | None = None) -> dict:
@@ -63,8 +70,7 @@ def main(customer_index: int | None = None) -> dict:
 
     if TARGET_COLUMN not in df.columns:
         raise ValueError(
-            f"Target column '{TARGET_COLUMN}' "
-            "was not found in the dataset."
+            f"Target column '{TARGET_COLUMN}' was not found in the dataset."
         )
 
     X = df.drop(columns=[TARGET_COLUMN])
@@ -100,15 +106,8 @@ def main(customer_index: int | None = None) -> dict:
     X_train = engineer_features(X_train)
     X_test = engineer_features(X_test)
 
-    print(
-        f"X_train after feature engineering: "
-        f"{X_train.shape}"
-    )
-
-    print(
-        f"X_test after feature engineering: "
-        f"{X_test.shape}"
-    )
+    print(f"X_train after feature engineering: {X_train.shape}")
+    print(f"X_test after feature engineering:  {X_test.shape}")
 
     # ==============================================================
     # 6. Hyperparameter Tuning
@@ -143,14 +142,10 @@ def main(customer_index: int | None = None) -> dict:
     )
 
     print("\nBest parameters:")
-
     for parameter, value in best_params.items():
         print(f"  {parameter}: {value}")
 
-    print(
-        f"\nBest mean CV ROC-AUC: "
-        f"{best_score:.4f}"
-    )
+    print(f"\nBest mean CV ROC-AUC: {best_score:.4f}")
 
     # ==============================================================
     # 7. Final preprocessing
@@ -172,15 +167,8 @@ def main(customer_index: int | None = None) -> dict:
         X_test=X_test,
     )
 
-    print(
-        f"X_train after preprocessing: "
-        f"{X_train_processed.shape}"
-    )
-
-    print(
-        f"X_test after preprocessing: "
-        f"{X_test_processed.shape}"
-    )
+    print(f"X_train after preprocessing: {X_train_processed.shape}")
+    print(f"X_test after preprocessing:  {X_test_processed.shape}")
 
     # ==============================================================
     # 8. Final Feature Selection
@@ -209,20 +197,9 @@ def main(customer_index: int | None = None) -> dict:
         X_test=X_test_processed,
     )
 
-    print(
-        f"X_train after feature selection: "
-        f"{X_train_selected.shape}"
-    )
-
-    print(
-        f"X_test after feature selection: "
-        f"{X_test_selected.shape}"
-    )
-
-    print(
-        f"Number of selected features: "
-        f"{X_train_selected.shape[1]}"
-    )
+    print(f"X_train after feature selection: {X_train_selected.shape}")
+    print(f"X_test after feature selection:  {X_test_selected.shape}")
+    print(f"Number of selected features:     {X_train_selected.shape[1]}")
 
     # ==============================================================
     # 9. Final Model Training
@@ -238,9 +215,29 @@ def main(customer_index: int | None = None) -> dict:
         best_params=best_params,
     )
 
-    print(
-        "Final XGBoost model trained successfully."
-    )
+    print("Final XGBoost model trained successfully.")
+
+    # ==============================================================
+    # 9.5 Save Artifacts
+    # ==============================================================
+
+    print("\n" + "=" * 70)
+    print("9.5 Saving artifacts")
+    print("=" * 70)
+
+    save_model(model)
+    save_preprocessor(preprocessor)
+    save_selector(selector)
+
+    metadata = {
+        "model_type": "XGBoost",
+        "target": TARGET_COLUMN,
+        "selected_features": X_train_selected.columns.tolist(),
+        "n_features": int(X_train_selected.shape[1]),
+        "training_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    save_metadata(metadata)
+    print("All artifacts saved successfully.")
 
     # ==============================================================
     # 10. Prediction
@@ -294,32 +291,30 @@ def main(customer_index: int | None = None) -> dict:
     print("12. SHAP explainability")
     print("=" * 70)
 
-    explainer = create_shap_explainer(model)
+    explainer = create_tree_explainer(
+        model=model,
+        background_data=X_train_selected,
+    )
 
     shap_results = explain_global(
         explainer=explainer,
-        X=X_test_selected,
+        X_test=X_test_selected,
     )
 
-    print(
-        "Global SHAP explanations generated successfully."
-    )
+    print("Global SHAP explanations generated successfully.")
 
     customer_explanation = None
 
     if customer_index is not None:
         customer_explanation = explain_customer(
-            explainer=explainer,
             model=model,
-            X=X_test_selected,
-            customer_index=customer_index,
+            explainer=explainer,
+            X_test=X_test_selected,
+            client_index=customer_index,
             threshold=0.5,
         )
 
-        print(
-            f"SHAP explanation generated for customer "
-            f"index {customer_index}."
-        )
+        print(f"SHAP explanation generated for customer index {customer_index}.")
 
     # ==============================================================
     # 13. Return artifacts
@@ -331,31 +326,18 @@ def main(customer_index: int | None = None) -> dict:
 
     return {
         "model": model,
-
         "preprocessor": preprocessor,
-
         "selector": selector,
-
         "best_params": best_params,
-
         "best_score": best_score,
-
         "study": study,
-
         "X_test": X_test_selected,
-
         "y_test": y_test,
-
         "y_pred": y_pred,
-
         "y_proba": y_proba,
-
         "metrics": metrics,
-
         "shap_explainer": explainer,
-
         "shap_results": shap_results,
-
         "customer_explanation": customer_explanation,
     }
 

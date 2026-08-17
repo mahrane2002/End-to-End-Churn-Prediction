@@ -1,125 +1,60 @@
 {
-    "status": "passed",
-    "dataframe_size": {
-        "num_rows": 10000,
-        "num_cols": 14,
-        "is_empty": false,
-        "passed": true
-    },
-    "schema": {
-        "expected_columns": [
-            "RowNumber",
-            "CustomerId",
-            "Surname",
-            "CreditScore",
-            "Geography",
-            "Gender",
-            "Age",
-            "Tenure",
-            "Balance",
-            "NumOfProducts",
-            "HasCrCard",
-            "IsActiveMember",
-            "EstimatedSalary",
-            "Churn"
-        ],
-        "missing_columns": [],
-        "extra_columns": [],
-        "passed": true
-    },
-    "data_types": {
-        "detected_types": {
-            "RowNumber": "int64",
-            "CustomerId": "int64",
-            "Surname": "object",
-            "CreditScore": "int64",
-            "Geography": "object",
-            "Gender": "object",
-            "Age": "int64",
-            "Tenure": "int64",
-            "Balance": "float64",
-            "NumOfProducts": "int64",
-            "HasCrCard": "int64",
-            "IsActiveMember": "int64",
-            "EstimatedSalary": "float64",
-            "Churn": "int64"
+    "is_valid": true,
+    "dataset_shape": [
+        10000,
+        14
+    ],
+    "checks": {
+        "not_empty": {
+            "status": "PASSED"
         },
-        "numeric_columns": [
-            "RowNumber",
-            "CustomerId",
-            "CreditScore",
-            "Age",
-            "Tenure",
-            "Balance",
-            "NumOfProducts",
-            "HasCrCard",
-            "IsActiveMember",
-            "EstimatedSalary",
-            "Churn"
-        ],
-        "categorical_columns": [
-            "Surname",
-            "Geography",
-            "Gender"
-        ],
-        "passed": true
-    },
-    "missing_values": {
-        "total_missing_values": 0,
-        "missing_values_per_column": {
-            "RowNumber": 0,
-            "CustomerId": 0,
-            "Surname": 0,
-            "CreditScore": 0,
-            "Geography": 0,
-            "Gender": 0,
-            "Age": 0,
-            "Tenure": 0,
-            "Balance": 0,
-            "NumOfProducts": 0,
-            "HasCrCard": 0,
-            "IsActiveMember": 0,
-            "EstimatedSalary": 0,
-            "Churn": 0
+        "columns_present": {
+            "status": "PASSED"
         },
-        "missing_percentage_per_column": {
-            "RowNumber": 0.0,
-            "CustomerId": 0.0,
-            "Surname": 0.0,
-            "CreditScore": 0.0,
-            "Geography": 0.0,
-            "Gender": 0.0,
-            "Age": 0.0,
-            "Tenure": 0.0,
-            "Balance": 0.0,
-            "NumOfProducts": 0.0,
-            "HasCrCard": 0.0,
-            "IsActiveMember": 0.0,
-            "EstimatedSalary": 0.0,
-            "Churn": 0.0
+        "target_present": {
+            "status": "PASSED"
         },
-        "columns_above_threshold": [],
-        "max_missing_pct_threshold": 0.05,
-        "passed": true
-    },
-    "target_column": {
-        "target_column": "Churn",
-        "exists": true,
-        "unique_values": [
-            1,
-            0
-        ],
-        "allowed_values": [
-            0,
-            1
-        ],
-        "invalid_values": [],
-        "passed": true
-    },
-    "duplicates": {
-        "duplicate_count": 0,
-        "duplicate_percentage": 0.0,
-        "passed": true
+        "target_binary": {
+            "status": "PASSED"
+        },
+        "no_duplicates": {
+            "status": "PASSED"
+        },
+        "missing_values": {
+            "status": "PASSED",
+            "missing_count_per_column": {}
+        },
+        "data_types": {
+            "status": "PASSED",
+            "types": {
+                "RowNumber": "int64",
+                "CustomerId": "int64",
+                "Surname": "str",
+                "CreditScore": "int64",
+                "Geography": "str",
+                "Gender": "str",
+                "Age": "int64",
+                "Tenure": "int64",
+                "Balance": "float64",
+                "NumOfProducts": "int64",
+                "HasCrCard": "int64",
+                "IsActiveMember": "int64",
+                "EstimatedSalary": "float64",
+                "Churn": "int64"
+            }
+        },
+        "valid_age": {
+            "status": "PASSED"
+        },
+        "valid_tenure": {
+            "status": "PASSED"
+        },
+        "valid_products": {
+            "status": "PASSED"
+        },
+        "valid_credit_score": {
+            "status": "PASSED"
+        }
     },
     "errors": []
 }

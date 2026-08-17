@@ -47,6 +47,8 @@ ARTIFACT_DIR: Path = ROOT_DIR / "artifacts"
 MODEL_PATH: Path = ARTIFACT_DIR / "model.pkl"
 PREPROCESSOR_PATH: Path = ARTIFACT_DIR / "preprocessor.pkl"
 THRESHOLD_PATH: Path = ARTIFACT_DIR / "threshold.json"
+SELECTOR_PATH: Path = ARTIFACT_DIR / "selector.pkl"
+METADATA_PATH: Path = ARTIFACT_DIR / "metadata.json"
 
 
 # ==============================================================================

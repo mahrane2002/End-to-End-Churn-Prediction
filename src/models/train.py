@@ -62,6 +62,7 @@ def train_model(
         eval_metric="logloss",
         random_state=RANDOM_STATE,
         n_jobs=-1,
+        enable_categorical=False,
     )
 
     # ------------------------------------------------------------------

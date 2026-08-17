@@ -176,32 +176,6 @@ def explain_global(
 
     plt.close()
 
-    # --------------------------------------------------------------
-    # SHAP beeswarm / summary plot
-    # --------------------------------------------------------------
-
-    plt.figure()
-
-    shap.plots.beeswarm(
-        explanation,
-        max_display=max_display,
-        show=False,
-    )
-
-    plt.tight_layout()
-
-    summary_plot_path = (
-        output_dir / "shap_summary_beeswarm.png"
-    )
-
-    plt.savefig(
-        summary_plot_path,
-        bbox_inches="tight",
-        dpi=300,
-    )
-
-    plt.close()
-
     return importance
 
 

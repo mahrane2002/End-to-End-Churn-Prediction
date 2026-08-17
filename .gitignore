@@ -1,0 +1,21 @@
+# Python compiled files and cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment variables
+.env
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Artifacts
+artifacts/*
+!artifacts/.gitkeep
+
+# Generated data files
+data/processed/*
+!data/processed/.gitkeep
