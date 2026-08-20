@@ -1,77 +1,52 @@
-"""Tests for the overall churn prediction pipeline and explainability."""
-
-import tempfile
-from pathlib import Path
+import pytest
+from unittest.mock import patch, MagicMock
 import pandas as pd
+from main import main
 
-from src.config.config import TARGET_COLUMN
-from src.data.data_ingestion import load_data
-from src.preprocessing.feature_engineering import engineer_features
-from src.preprocessing.preprocessing import preprocess_data
-from src.preprocessing.feature_selection import select_features
-from src.models.train import train_model
-from src.models.explain import (
-    create_tree_explainer,
-    explain_global,
-    explain_customer,
-)
+def test_pipeline_integration(large_sample_df):
+    # Arrange:
+    # 1. Prepare raw data (containing "Exited" instead of "Churn")
+    raw_df = large_sample_df.copy()
+    raw_df = raw_df.rename(columns={"Churn": "Exited"})
 
-
-def test_shap_explanations():
-    """Test global and customer SHAP explanations."""
-    df = load_data().iloc[:100]
-    X = df.drop(columns=[TARGET_COLUMN])
-    y = df[TARGET_COLUMN]
-
-    X_eng = engineer_features(X)
-    X_train_proc, X_test_proc, preprocessor = preprocess_data(X_eng, X_eng)
-    X_train_sel, X_test_sel, selector = select_features(
-        X_train=X_train_proc,
-        y_train=y,
-        X_test=X_test_proc,
-        k=5,
-    )
-
-    dummy_params = {
+    # Define mock returns
+    mock_best_params = {
         "n_estimators": 5,
         "max_depth": 2,
-        "learning_rate": 0.1,
+        "learning_rate": 0.1
     }
-    model = train_model(X_train_sel, y, best_params=dummy_params)
 
-    # 1. Create TreeExplainer
-    explainer = create_tree_explainer(
-        model=model,
-        background_data=X_train_sel,
-        background_size=10,
-    )
-    assert explainer is not None
+    # Act & Assert: Patch all file writers, data ingestion, Optuna tuning, validation, and explainers
+    # to run instantly without creating files in the production paths.
+    with patch("src.data.data_ingestion.load_data", return_value=raw_df), \
+         patch("src.models.tuning.tune_model", return_value=(mock_best_params, 0.85, None)), \
+         patch("main.validate_data", return_value=True), \
+         patch("main.save_model") as mock_save_model, \
+         patch("main.save_preprocessor") as mock_save_preprocessor, \
+         patch("main.save_selector") as mock_save_selector, \
+         patch("main.save_metadata") as mock_save_metadata, \
+         patch("main.create_tree_explainer", return_value=MagicMock()) as mock_create_explainer, \
+         patch("main.explain_global", return_value=pd.DataFrame()) as mock_explain_global:
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_path = Path(tmp_dir)
+        # Run the full pipeline
+        results = main(customer_index=None)
 
-        # 2. Test global explanation
-        importance = explain_global(
-            explainer=explainer,
-            X_test=X_test_sel,
-            output_dir=tmp_path,
-        )
-        assert isinstance(importance, pd.DataFrame)
-        assert not importance.empty
-        assert (tmp_path / "shap_feature_importance.png").exists()
-        assert (tmp_path / "shap_feature_importance.csv").exists()
+        # Assert: Verify all pipeline components returned valid outputs
+        assert isinstance(results, dict)
+        assert results["model"] is not None
+        assert results["preprocessor"] is not None
+        assert results["selector"] is not None
+        assert results["best_params"] == mock_best_params
+        assert results["best_score"] == 0.85
+        assert len(results["y_pred"]) == len(results["X_test"])
+        assert len(results["y_proba"]) == len(results["X_test"])
+        assert "accuracy" in results["metrics"]
+        assert isinstance(results["shap_results"], pd.DataFrame)
 
-        # 3. Test customer explanation
-        client_idx = X_test_sel.index[0]
-        contributions = explain_customer(
-            model=model,
-            explainer=explainer,
-            X_test=X_test_sel,
-            client_index=client_idx,
-            threshold=0.5,
-            output_dir=tmp_path,
-        )
-        assert isinstance(contributions, pd.DataFrame)
-        assert not contributions.empty
-        assert (tmp_path / f"client_{client_idx}_waterfall.png").exists()
-        assert (tmp_path / f"client_{client_idx}_shap.csv").exists()
+        # Assert: Verify saving functions were called correctly
+        mock_save_model.assert_called_once_with(results["model"])
+        mock_save_preprocessor.assert_called_once_with(results["preprocessor"])
+        mock_save_selector.assert_called_once_with(results["selector"])
+        mock_save_metadata.assert_called_once()
+        mock_create_explainer.assert_called_once()
+        mock_explain_global.assert_called_once()

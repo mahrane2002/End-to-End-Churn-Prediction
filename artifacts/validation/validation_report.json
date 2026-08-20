@@ -1,7 +1,7 @@
 {
-    "is_valid": true,
+    "is_valid": false,
     "dataset_shape": [
-        10000,
+        15,
         14
     ],
     "checks": {
@@ -44,7 +44,8 @@
             }
         },
         "valid_age": {
-            "status": "PASSED"
+            "status": "FAILED",
+            "message": "Found 1 rows with Age <= 0"
         },
         "valid_tenure": {
             "status": "PASSED"
@@ -53,8 +54,12 @@
             "status": "PASSED"
         },
         "valid_credit_score": {
-            "status": "PASSED"
+            "status": "FAILED",
+            "message": "Found 1 rows with CreditScore outside [300, 850]"
         }
     },
-    "errors": []
+    "errors": [
+        "Found 1 rows with Age <= 0",
+        "Found 1 rows with CreditScore outside [300, 850]"
+    ]
 }

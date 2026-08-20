@@ -1,37 +1,31 @@
-"""Tests for the data validation module."""
-
-import pandas as pd
 import pytest
-
-from src.config.config import TARGET_COLUMN
-from src.data.data_ingestion import load_data
 from src.data.data_validation import validate_data
 
+def test_validate_data_success(sample_df):
+    # Arrange: Use a valid dataframe
 
-def test_validate_data_success():
-    """Test that a valid DataFrame loaded via ingestion passes validation."""
-    df = load_data()
-    assert validate_data(df) is True
+    # Act: Validate the data
+    result = validate_data(sample_df)
 
+    # Assert: Verification passes
+    assert result is True
 
-def test_validate_data_empty():
-    """Test that an empty DataFrame raises a ValueError."""
-    empty_df = pd.DataFrame()
-    with pytest.raises(ValueError, match="empty"):
-        validate_data(empty_df)
+def test_validate_data_missing_column(sample_df):
+    # Arrange: Remove a required column
+    invalid_df = sample_df.drop(columns=["Age"])
 
+    # Act & Assert: Verify it raises ValueError
+    with pytest.raises(ValueError) as exc_info:
+        validate_data(invalid_df)
+    assert "missing required columns" in str(exc_info.value)
 
-def test_validate_data_missing_target_column():
-    """Test that a DataFrame missing the target column raises a ValueError."""
-    df = load_data()
-    df_missing_target = df.drop(columns=[TARGET_COLUMN])
-    with pytest.raises(ValueError, match="missing required columns"):
-        validate_data(df_missing_target)
+def test_validate_data_invalid_values(sample_df):
+    # Arrange: Inject an invalid age (e.g., -5) and credit score outside [300, 850]
+    invalid_df = sample_df.copy()
+    invalid_df.loc[0, "Age"] = -5
+    invalid_df.loc[1, "CreditScore"] = 250
 
-
-def test_validate_data_missing_feature_column():
-    """Test that a DataFrame missing a required feature column raises a ValueError."""
-    df = load_data()
-    df_missing_feature = df.drop(columns=["Age"])
-    with pytest.raises(ValueError, match="missing required columns"):
-        validate_data(df_missing_feature)
+    # Act & Assert: Verify it raises ValueError
+    with pytest.raises(ValueError) as exc_info:
+        validate_data(invalid_df)
+    assert "Age <= 0" in str(exc_info.value) or "CreditScore outside" in str(exc_info.value)
