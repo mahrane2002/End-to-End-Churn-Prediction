@@ -1,7 +1,7 @@
 {
-    "is_valid": false,
+    "is_valid": true,
     "dataset_shape": [
-        15,
+        2,
         14
     ],
     "checks": {
@@ -35,17 +35,16 @@
                 "Gender": "str",
                 "Age": "int64",
                 "Tenure": "int64",
-                "Balance": "float64",
+                "Balance": "int64",
                 "NumOfProducts": "int64",
                 "HasCrCard": "int64",
                 "IsActiveMember": "int64",
-                "EstimatedSalary": "float64",
+                "EstimatedSalary": "int64",
                 "Churn": "int64"
             }
         },
         "valid_age": {
-            "status": "FAILED",
-            "message": "Found 1 rows with Age <= 0"
+            "status": "PASSED"
         },
         "valid_tenure": {
             "status": "PASSED"
@@ -54,12 +53,8 @@
             "status": "PASSED"
         },
         "valid_credit_score": {
-            "status": "FAILED",
-            "message": "Found 1 rows with CreditScore outside [300, 850]"
+            "status": "PASSED"
         }
     },
-    "errors": [
-        "Found 1 rows with Age <= 0",
-        "Found 1 rows with CreditScore outside [300, 850]"
-    ]
+    "errors": []
 }
