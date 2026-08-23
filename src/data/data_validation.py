@@ -69,7 +69,7 @@ def validate_data(df: pd.DataFrame) -> bool:
         is_valid = False
         errors.append(f"missing required columns: {missing_columns}")
     else:
-        checks["columns_present"] = {"status": "PASSED"}
+            checks["columns_present"] = {"status": "PASSED"}
 
     # 3. Check that the target column exists.
     if TARGET_COLUMN not in df.columns:
