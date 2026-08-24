@@ -70,7 +70,7 @@ def prepare_for_prediction(
 ) -> pd.DataFrame:
     """Transform raw data for model inference.
 
-    The function applies:
+    Pipeline:
 
         raw data
             ↓
@@ -80,27 +80,7 @@ def prepare_for_prediction(
             ↓
         feature selection
 
-    IMPORTANT
-    ---------
-    Neither the preprocessor nor the selector is fitted here.
-
-    They must already be fitted on training data.
-
-    Parameters
-    ----------
-    X : pd.DataFrame
-        Raw customer features.
-
-    preprocessor : Any
-        Fitted preprocessing transformer.
-
-    selector : Any
-        Fitted feature selector.
-
-    Returns
-    -------
-    pd.DataFrame
-        Data ready to be passed to the trained model.
+    No fitting is performed during inference.
     """
 
     if not isinstance(X, pd.DataFrame):
@@ -117,42 +97,63 @@ def prepare_for_prediction(
 
     # --------------------------------------------------------------
     # 2. Preprocessing
-    #
-    # IMPORTANT:
-    # transform() only.
-    # We NEVER call fit() or fit_transform() here.
     # --------------------------------------------------------------
 
-    X_processed = preprocessor.transform(X_engineered)
+    X_processed_array = preprocessor.transform(
+        X_engineered
+    )
 
-    # --------------------------------------------------------------
-    # 3. Recover feature names
-    # --------------------------------------------------------------
-
-    feature_names = preprocessor.get_feature_names_out()
+    feature_names = (
+        preprocessor.get_feature_names_out()
+    )
 
     X_processed = pd.DataFrame(
-        X_processed,
+        X_processed_array,
         columns=feature_names,
         index=X.index,
     )
 
     # --------------------------------------------------------------
-    # 4. Feature selection
-    #
-    # IMPORTANT:
-    # selector was fitted during training.
-    # Only transform new data.
+    # 3. Verify selector compatibility
     # --------------------------------------------------------------
 
-    X_selected = selector.transform(X_processed)
+    if hasattr(selector, "feature_names_in_"):
 
-    selected_feature_names = selector.get_feature_names_out(
-        X_processed.columns
+        expected_features = list(
+            selector.feature_names_in_
+        )
+
+        actual_features = list(
+            X_processed.columns
+        )
+
+        if expected_features != actual_features:
+            raise ValueError(
+                "Preprocessor and selector are incompatible.\n"
+                f"Selector expects {len(expected_features)} features.\n"
+                f"Preprocessor produced {len(actual_features)} features.\n"
+                f"Missing features: "
+                f"{sorted(set(expected_features) - set(actual_features))}\n"
+                f"Unexpected features: "
+                f"{sorted(set(actual_features) - set(expected_features))}"
+            )
+
+    # --------------------------------------------------------------
+    # 4. Feature selection
+    # --------------------------------------------------------------
+
+    X_selected_array = selector.transform(
+        X_processed
+    )
+
+    selected_feature_names = (
+        selector.get_feature_names_out(
+            X_processed.columns
+        )
     )
 
     X_selected = pd.DataFrame(
-        X_selected,
+        X_selected_array,
         columns=selected_feature_names,
         index=X.index,
     )
@@ -251,4 +252,4 @@ def predict_raw_proba(
     return predict_proba(
         model=model,
         X=X_ready,
-    )
+    )

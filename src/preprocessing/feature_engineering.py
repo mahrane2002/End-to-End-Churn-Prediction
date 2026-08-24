@@ -3,10 +3,23 @@
 import pandas as pd
 
 
+# ---------------------------------------------------------------------------
+# Columns that must never be used as model features
+# ---------------------------------------------------------------------------
+
+IDENTIFIER_COLUMNS = [
+    "RowNumber",
+    "CustomerId",
+    "Surname",
+]
+
+
 def create_features(df: pd.DataFrame) -> pd.DataFrame:
     """Create meaningful features for churn prediction.
 
-    The function only creates new features.
+    Identifier columns are removed before preprocessing so that they
+    are never one-hot encoded or passed to feature selection.
+
     Data cleaning, imputation, scaling, and encoding
     are handled separately in preprocessing.py.
 
@@ -18,13 +31,26 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
     Returns
     -------
     pd.DataFrame
-        Dataset with engineered features.
+        Dataset with engineered features and without identifiers.
     """
 
     data = df.copy()
 
     # ------------------------------------------------------------------
-    # 1. Balance relative to estimated age
+    # 1. Remove identifiers
+    # ------------------------------------------------------------------
+
+    columns_to_drop = [
+        column
+        for column in IDENTIFIER_COLUMNS
+        if column in data.columns
+    ]
+
+    if columns_to_drop:
+        data = data.drop(columns=columns_to_drop)
+
+    # ------------------------------------------------------------------
+    # 2. Balance relative to estimated age
     # ------------------------------------------------------------------
 
     data["BalancePerAge"] = (
@@ -33,7 +59,7 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # ------------------------------------------------------------------
-    # 2. Estimated customer activity
+    # 3. Estimated customer activity
     # ------------------------------------------------------------------
 
     data["ProductsPerTenure"] = (
@@ -42,7 +68,7 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # ------------------------------------------------------------------
-    # 3. Customer engagement indicator
+    # 4. Customer engagement indicator
     # ------------------------------------------------------------------
 
     data["IsActiveAndHasCard"] = (
@@ -51,7 +77,7 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # ------------------------------------------------------------------
-    # 4. Age groups
+    # 5. Age groups
     # ------------------------------------------------------------------
 
     data["AgeGroup"] = pd.cut(
@@ -68,7 +94,7 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # ------------------------------------------------------------------
-    # 5. Balance status
+    # 6. Balance status
     # ------------------------------------------------------------------
 
     data["HasBalance"] = (
@@ -76,7 +102,7 @@ def create_features(df: pd.DataFrame) -> pd.DataFrame:
     ).astype(int)
 
     # ------------------------------------------------------------------
-    # 6. Product usage indicator
+    # 7. Product usage indicator
     # ------------------------------------------------------------------
 
     data["MultipleProducts"] = (
@@ -99,24 +125,17 @@ def engineer_features(
     Returns
     -------
     pd.DataFrame
-        Dataset with engineered features.
+        Dataset with engineered features and without identifiers.
     """
-
-    # ------------------------------------------------------------------
-    # 1. Validate input type
-    # ------------------------------------------------------------------
 
     if not isinstance(df, pd.DataFrame):
         raise TypeError(
             "Input data must be a pandas DataFrame."
         )
 
-    # ------------------------------------------------------------------
-    # 2. Validate that the DataFrame is not empty
-    # ------------------------------------------------------------------
-
     if df.empty:
         raise ValueError(
             "Input DataFrame is empty."
         )
+
     return create_features(df)

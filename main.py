@@ -230,12 +230,26 @@ def main(customer_index: int | None = None) -> dict:
     save_selector(selector)
 
     metadata = {
-        "model_type": "XGBoost",
-        "target": TARGET_COLUMN,
-        "selected_features": X_train_selected.columns.tolist(),
-        "n_features": int(X_train_selected.shape[1]),
-        "training_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    }
+    "model_type": "XGBoost",
+    "target": TARGET_COLUMN,
+    "removed_columns": [
+        "RowNumber",
+        "CustomerId",
+        "Surname",
+    ],
+    "preprocessor_features": (
+        X_train_processed.columns.tolist()
+    ),
+    "selected_features": (
+        X_train_selected.columns.tolist()
+    ),
+    "n_features": int(
+        X_train_selected.shape[1]
+    ),
+    "training_date": datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S"
+    ),
+}
     save_metadata(metadata)
     print("All artifacts saved successfully.")
 

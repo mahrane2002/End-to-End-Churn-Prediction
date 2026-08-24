@@ -10,7 +10,11 @@ to prevent data leakage.
 
 The train/test split is performed exclusively in main.py.
 """
-
+IDENTIFIER_COLUMNS = {
+    "RowNumber",
+    "CustomerId",
+    "Surname",
+}
 import pandas as pd
 
 from sklearn.compose import ColumnTransformer
@@ -159,6 +163,8 @@ def preprocess_data(
 
     if X_test.empty:
         raise ValueError("X_test is empty.")
+
+
 
     # -----------------------------------------------------------------------
     # 2. Identify feature types using training data only

@@ -1,7 +1,7 @@
 {
     "is_valid": true,
     "dataset_shape": [
-        2,
+        10000,
         14
     ],
     "checks": {
@@ -35,11 +35,11 @@
                 "Gender": "str",
                 "Age": "int64",
                 "Tenure": "int64",
-                "Balance": "int64",
+                "Balance": "float64",
                 "NumOfProducts": "int64",
                 "HasCrCard": "int64",
                 "IsActiveMember": "int64",
-                "EstimatedSalary": "int64",
+                "EstimatedSalary": "float64",
                 "Churn": "int64"
             }
         },
