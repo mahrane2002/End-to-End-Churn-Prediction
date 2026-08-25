@@ -1,6 +1,7 @@
 # Python compiled files and cache
 __pycache__/
 *.py[cod]
+*$py.class
 
 # Virtual environments
 .venv/
@@ -19,3 +20,4 @@ artifacts/*
 # Generated data files
 data/processed/*
 !data/processed/.gitkeep
+
