@@ -1,6 +1,9 @@
+
 """Main entry point for the Bank Customer Churn Prediction project."""
 
 from datetime import datetime
+
+import mlflow
 from sklearn.model_selection import train_test_split
 
 from src.config.config import (
@@ -22,6 +25,7 @@ from src.models.tuning import tune_model
 from src.preprocessing.feature_engineering import engineer_features
 from src.preprocessing.feature_selection import select_features
 from src.preprocessing.preprocessing import preprocess_data
+from src.tracking.mlflow_tracking import setup_mlflow
 from src.utils.artifact_manager import (
     save_model,
     save_preprocessor,
@@ -34,326 +38,450 @@ def main(customer_index: int | None = None) -> dict:
     """Run the complete churn prediction pipeline."""
 
     # ==============================================================
-    # 1. Load data
+    # MLflow setup
     # ==============================================================
 
-    print("=" * 70)
-    print("1. Loading data")
-    print("=" * 70)
+    setup_mlflow()
 
-    df = load_data()
+    with mlflow.start_run():
 
-    print(f"Dataset shape: {df.shape}")
+        print("=" * 70)
+        print("MLflow run started")
+        print("=" * 70)
 
-    # ==============================================================
-    # 2. Validate data
-    # ==============================================================
+        # ==============================================================
+        # 1. Load data
+        # ==============================================================
 
-    print("\n" + "=" * 70)
-    print("2. Validating data")
-    print("=" * 70)
+        print("\n" + "=" * 70)
+        print("1. Loading data")
+        print("=" * 70)
 
-    is_valid = validate_data(df)
+        df = load_data()
 
-    if not is_valid:
-        raise ValueError("Data validation failed.")
+        print(f"Dataset shape: {df.shape}")
 
-    print("Data validation passed.")
+        # Log dataset information
+        mlflow.log_params({
+            "model_type": "XGBoost",
+            "target_column": TARGET_COLUMN,
+            "test_size": TEST_SIZE,
+            "random_state": RANDOM_STATE,
+            "n_trials": 50,
+            "dataset_rows": df.shape[0],
+            "dataset_columns": df.shape[1],
+        })
 
-    # ==============================================================
-    # 3. Separate features and target
-    # ==============================================================
+        # ==============================================================
+        # 2. Validate data
+        # ==============================================================
 
-    print("\n" + "=" * 70)
-    print("3. Separating features and target")
-    print("=" * 70)
+        print("\n" + "=" * 70)
+        print("2. Validating data")
+        print("=" * 70)
 
-    if TARGET_COLUMN not in df.columns:
-        raise ValueError(
-            f"Target column '{TARGET_COLUMN}' was not found in the dataset."
+        is_valid = validate_data(df)
+
+        if not is_valid:
+            raise ValueError("Data validation failed.")
+
+        print("Data validation passed.")
+
+        # ==============================================================
+        # 3. Separate features and target
+        # ==============================================================
+
+        print("\n" + "=" * 70)
+        print("3. Separating features and target")
+        print("=" * 70)
+
+        if TARGET_COLUMN not in df.columns:
+            raise ValueError(
+                f"Target column '{TARGET_COLUMN}' was not found in the dataset."
+            )
+
+        X = df.drop(columns=[TARGET_COLUMN])
+        y = df[TARGET_COLUMN]
+
+        # Log target distribution
+        mlflow.log_params({
+            "positive_class_count": int(y.sum()),
+            "negative_class_count": int((y == 0).sum()),
+        })
+
+        # ==============================================================
+        # 4. Train / Test split
+        # ==============================================================
+
+        print("\n" + "=" * 70)
+        print("4. Train / Test split")
+        print("=" * 70)
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X,
+            y,
+            test_size=TEST_SIZE,
+            stratify=y,
+            random_state=RANDOM_STATE,
         )
 
-    X = df.drop(columns=[TARGET_COLUMN])
-    y = df[TARGET_COLUMN]
+        print(f"X_train shape: {X_train.shape}")
+        print(f"X_test shape:  {X_test.shape}")
 
-    # ==============================================================
-    # 4. Train / Test split
-    # ==============================================================
+        # Log split information
+        mlflow.log_params({
+            "train_samples": X_train.shape[0],
+            "test_samples": X_test.shape[0],
+            "initial_features": X_train.shape[1],
+        })
 
-    print("\n" + "=" * 70)
-    print("4. Train / Test split")
-    print("=" * 70)
+        # ==============================================================
+        # 5. Feature Engineering
+        # ==============================================================
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y,
-        test_size=TEST_SIZE,
-        stratify=y,
-        random_state=RANDOM_STATE,
-    )
+        print("\n" + "=" * 70)
+        print("5. Feature engineering")
+        print("=" * 70)
 
-    print(f"X_train shape: {X_train.shape}")
-    print(f"X_test shape:  {X_test.shape}")
+        X_train = engineer_features(X_train)
+        X_test = engineer_features(X_test)
 
-    # ==============================================================
-    # 5. Feature Engineering
-    # ==============================================================
+        print(f"X_train after feature engineering: {X_train.shape}")
+        print(f"X_test after feature engineering:  {X_test.shape}")
 
-    print("\n" + "=" * 70)
-    print("5. Feature engineering")
-    print("=" * 70)
+        mlflow.log_params({
+            "features_after_engineering": X_train.shape[1],
+        })
 
-    X_train = engineer_features(X_train)
-    X_test = engineer_features(X_test)
+        # ==============================================================
+        # 6. Hyperparameter Tuning
+        #
+        # IMPORTANT:
+        # Do NOT perform feature selection here beforehand.
+        #
+        # tune_model() performs:
+        #
+        # fold split
+        #     ↓
+        # preprocessing
+        #     ↓
+        # feature selection
+        #     ↓
+        # SMOTETomek
+        #     ↓
+        # XGBoost
+        #
+        # Feature selection is therefore fitted independently
+        # inside every CV fold.
+        # ==============================================================
 
-    print(f"X_train after feature engineering: {X_train.shape}")
-    print(f"X_test after feature engineering:  {X_test.shape}")
+        print("\n" + "=" * 70)
+        print("6. Hyperparameter tuning")
+        print("=" * 70)
 
-    # ==============================================================
-    # 6. Hyperparameter Tuning
-    #
-    # IMPORTANT:
-    # Do NOT perform feature selection here beforehand.
-    #
-    # tune_model() performs:
-    #
-    # fold split
-    #     ↓
-    # preprocessing
-    #     ↓
-    # feature selection
-    #     ↓
-    # SMOTETomek
-    #     ↓
-    # XGBoost
-    #
-    # Feature selection is therefore fitted independently
-    # inside every CV fold.
-    # ==============================================================
+        best_params, best_score, study = tune_model(
+            X_train=X_train,
+            y_train=y_train,
+            n_trials=50,
+        )
 
-    print("\n" + "=" * 70)
-    print("6. Hyperparameter tuning")
-    print("=" * 70)
+        print("\nBest parameters:")
+        for parameter, value in best_params.items():
+            print(f"  {parameter}: {value}")
 
-    best_params, best_score, study = tune_model(
-        X_train=X_train,
-        y_train=y_train,
-        n_trials=50,
-    )
+        print(f"\nBest mean CV ROC-AUC: {best_score:.4f}")
 
-    print("\nBest parameters:")
-    for parameter, value in best_params.items():
-        print(f"  {parameter}: {value}")
+        # ==============================================================
+        # MLflow - Optuna results
+        # ==============================================================
 
-    print(f"\nBest mean CV ROC-AUC: {best_score:.4f}")
+        mlflow.log_params(best_params)
 
-    # ==============================================================
-    # 7. Final preprocessing
-    #
-    # This preprocessing is fitted on the complete X_train.
-    # X_test is only transformed.
-    # ==============================================================
+        mlflow.log_metric(
+            "best_cv_roc_auc",
+            float(best_score),
+        )
 
-    print("\n" + "=" * 70)
-    print("7. Final preprocessing")
-    print("=" * 70)
+        # Log number of Optuna trials
+        mlflow.log_param(
+            "completed_optuna_trials",
+            len(study.trials),
+        )
 
-    (
-        X_train_processed,
-        X_test_processed,
-        preprocessor,
-    ) = preprocess_data(
-        X_train=X_train,
-        X_test=X_test,
-    )
+        # ==============================================================
+        # 7. Final preprocessing
+        #
+        # This preprocessing is fitted on the complete X_train.
+        # X_test is only transformed.
+        # ==============================================================
 
-    print(f"X_train after preprocessing: {X_train_processed.shape}")
-    print(f"X_test after preprocessing:  {X_test_processed.shape}")
+        print("\n" + "=" * 70)
+        print("7. Final preprocessing")
+        print("=" * 70)
 
-    # ==============================================================
-    # 8. Final Feature Selection
-    #
-    # IMPORTANT:
-    # This is the FINAL selector.
-    #
-    # It is fitted on the complete X_train only.
-    # X_test is only transformed.
-    #
-    # This selector is NOT used to perform CV.
-    # CV already performed its own selection inside each fold.
-    # ==============================================================
+        (
+            X_train_processed,
+            X_test_processed,
+            preprocessor,
+        ) = preprocess_data(
+            X_train=X_train,
+            X_test=X_test,
+        )
 
-    print("\n" + "=" * 70)
-    print("8. Final feature selection")
-    print("=" * 70)
+        print(f"X_train after preprocessing: {X_train_processed.shape}")
+        print(f"X_test after preprocessing:  {X_test_processed.shape}")
 
-    (
-        X_train_selected,
-        X_test_selected,
-        selector,
-    ) = select_features(
-        X_train=X_train_processed,
-        y_train=y_train,
-        X_test=X_test_processed,
-    )
+        mlflow.log_params({
+            "features_after_preprocessing": X_train_processed.shape[1],
+        })
 
-    print(f"X_train after feature selection: {X_train_selected.shape}")
-    print(f"X_test after feature selection:  {X_test_selected.shape}")
-    print(f"Number of selected features:     {X_train_selected.shape[1]}")
+        # ==============================================================
+        # 8. Final Feature Selection
+        #
+        # IMPORTANT:
+        # This is the FINAL selector.
+        #
+        # It is fitted on the complete X_train only.
+        # X_test is only transformed.
+        #
+        # This selector is NOT used to perform CV.
+        # CV already performed its own selection inside each fold.
+        # ==============================================================
 
-    # ==============================================================
-    # 9. Final Model Training
-    # ==============================================================
+        print("\n" + "=" * 70)
+        print("8. Final feature selection")
+        print("=" * 70)
 
-    print("\n" + "=" * 70)
-    print("9. Final model training")
-    print("=" * 70)
+        (
+            X_train_selected,
+            X_test_selected,
+            selector,
+        ) = select_features(
+            X_train=X_train_processed,
+            y_train=y_train,
+            X_test=X_test_processed,
+        )
 
-    model = train_model(
-        X_train=X_train_selected,
-        y_train=y_train,
-        best_params=best_params,
-    )
+        print(f"X_train after feature selection: {X_train_selected.shape}")
+        print(f"X_test after feature selection:  {X_test_selected.shape}")
+        print(f"Number of selected features:     {X_train_selected.shape[1]}")
 
-    print("Final XGBoost model trained successfully.")
+        mlflow.log_params({
+            "selected_features": X_train_selected.shape[1],
+        })
 
-    # ==============================================================
-    # 9.5 Save Artifacts
-    # ==============================================================
+        # ==============================================================
+        # 9. Final Model Training
+        # ==============================================================
 
-    print("\n" + "=" * 70)
-    print("9.5 Saving artifacts")
-    print("=" * 70)
+        print("\n" + "=" * 70)
+        print("9. Final model training")
+        print("=" * 70)
 
-    save_model(model)
-    save_preprocessor(preprocessor)
-    save_selector(selector)
+        model = train_model(
+            X_train=X_train_selected,
+            y_train=y_train,
+            best_params=best_params,
+        )
 
-    metadata = {
-    "model_type": "XGBoost",
-    "target": TARGET_COLUMN,
-    "removed_columns": [
-        "RowNumber",
-        "CustomerId",
-        "Surname",
-    ],
-    "preprocessor_features": (
-        X_train_processed.columns.tolist()
-    ),
-    "selected_features": (
-        X_train_selected.columns.tolist()
-    ),
-    "n_features": int(
-        X_train_selected.shape[1]
-    ),
-    "training_date": datetime.now().strftime(
-        "%Y-%m-%d %H:%M:%S"
-    ),
-}
-    save_metadata(metadata)
-    print("All artifacts saved successfully.")
+        print("Final XGBoost model trained successfully.")
 
-    # ==============================================================
-    # 10. Prediction
-    # ==============================================================
+        # ==============================================================
+        # MLflow - Log model
+        # ==============================================================
 
-    print("\n" + "=" * 70)
-    print("10. Prediction")
-    print("=" * 70)
+        mlflow.xgboost.log_model(
+            model,
+            artifact_path="model",
+        )
 
-    y_pred = predict(
-        model=model,
-        X=X_test_selected,
-    )
+        print("XGBoost model logged to MLflow.")
 
-    y_proba = predict_proba(
-        model=model,
-        X=X_test_selected,
-    )
+        # ==============================================================
+        # 9.5 Save Artifacts
+        # ==============================================================
 
-    print("Predictions generated successfully.")
+        print("\n" + "=" * 70)
+        print("9.5 Saving artifacts")
+        print("=" * 70)
 
-    # ==============================================================
-    # 11. Evaluation
-    # ==============================================================
+        save_model(model)
+        save_preprocessor(preprocessor)
+        save_selector(selector)
 
-    print("\n" + "=" * 70)
-    print("11. Model evaluation")
-    print("=" * 70)
+        metadata = {
+            "model_type": "XGBoost",
+            "target": TARGET_COLUMN,
+            "removed_columns": [
+                "RowNumber",
+                "CustomerId",
+                "Surname",
+            ],
+            "preprocessor_features": (
+                X_train_processed.columns.tolist()
+            ),
+            "selected_features": (
+                X_train_selected.columns.tolist()
+            ),
+            "n_features": int(
+                X_train_selected.shape[1]
+            ),
+            "training_date": datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+        }
 
-    metrics = evaluate_model(
-        y_test=y_test,
-        y_pred=y_pred,
-        y_proba=y_proba,
-    )
+        save_metadata(metadata)
 
-    # ==============================================================
-    # 12. SHAP Explainability
-    #
-    # IMPORTANT:
-    # SHAP is applied to the final trained XGBoost model.
-    #
-    # The explanation data is X_test_selected, which corresponds
-    # exactly to the features received by the final XGBoost model.
-    #
-    # SMOTETomek is NOT applied to X_test.
-    #
-    # The prediction threshold remains 0.5.
-    # ==============================================================
+        print("All artifacts saved successfully.")
 
-    print("\n" + "=" * 70)
-    print("12. SHAP explainability")
-    print("=" * 70)
+        # ==============================================================
+        # MLflow - Log local artifacts
+        # ==============================================================
 
-    explainer = create_tree_explainer(
-        model=model,
-        background_data=X_train_selected,
-    )
+        mlflow.log_artifact(
+            "artifacts/preprocessor.pkl"
+        )
 
-    shap_results = explain_global(
-        explainer=explainer,
-        X_test=X_test_selected,
-    )
+        mlflow.log_artifact(
+            "artifacts/selector.pkl"
+        )
 
-    print("Global SHAP explanations generated successfully.")
+        mlflow.log_artifact(
+            "artifacts/metadata.json"
+        )
 
-    customer_explanation = None
+        print("Preprocessor, selector and metadata logged to MLflow.")
 
-    if customer_index is not None:
-        customer_explanation = explain_customer(
+        # ==============================================================
+        # 10. Prediction
+        # ==============================================================
+
+        print("\n" + "=" * 70)
+        print("10. Prediction")
+        print("=" * 70)
+
+        y_pred = predict(
             model=model,
+            X=X_test_selected,
+        )
+
+        y_proba = predict_proba(
+            model=model,
+            X=X_test_selected,
+        )
+
+        print("Predictions generated successfully.")
+
+        # ==============================================================
+        # 11. Evaluation
+        # ==============================================================
+
+        print("\n" + "=" * 70)
+        print("11. Model evaluation")
+        print("=" * 70)
+
+        metrics = evaluate_model(
+            y_test=y_test,
+            y_pred=y_pred,
+            y_proba=y_proba,
+        )
+
+        # ==============================================================
+        # MLflow - Log evaluation metrics
+        # ==============================================================
+
+        mlflow.log_metrics({
+            "test_accuracy": float(metrics["accuracy"]),
+            "test_precision": float(metrics["precision"]),
+            "test_recall": float(metrics["recall"]),
+            "test_f1": float(metrics["f1_score"]),
+            "test_roc_auc": float(metrics["roc_auc"]),
+        })
+
+        print("Evaluation metrics logged to MLflow.")
+
+        # ==============================================================
+        # 12. SHAP Explainability
+        #
+        # IMPORTANT:
+        # SHAP is applied to the final trained XGBoost model.
+        #
+        # The explanation data is X_test_selected, which corresponds
+        # exactly to the features received by the final XGBoost model.
+        #
+        # SMOTETomek is NOT applied to X_test.
+        #
+        # The prediction threshold remains 0.5.
+        # ==============================================================
+
+        print("\n" + "=" * 70)
+        print("12. SHAP explainability")
+        print("=" * 70)
+
+        explainer = create_tree_explainer(
+            model=model,
+            background_data=X_train_selected,
+        )
+
+        shap_results = explain_global(
             explainer=explainer,
             X_test=X_test_selected,
-            client_index=customer_index,
-            threshold=0.5,
         )
 
-        print(f"SHAP explanation generated for customer index {customer_index}.")
+        print("Global SHAP explanations generated successfully.")
 
-    # ==============================================================
-    # 13. Return artifacts
-    # ==============================================================
+        customer_explanation = None
 
-    print("\n" + "=" * 70)
-    print("Pipeline completed successfully")
-    print("=" * 70)
+        if customer_index is not None:
+            customer_explanation = explain_customer(
+                model=model,
+                explainer=explainer,
+                X_test=X_test_selected,
+                client_index=customer_index,
+                threshold=0.5,
+            )
 
-    return {
-        "model": model,
-        "preprocessor": preprocessor,
-        "selector": selector,
-        "best_params": best_params,
-        "best_score": best_score,
-        "study": study,
-        "X_test": X_test_selected,
-        "y_test": y_test,
-        "y_pred": y_pred,
-        "y_proba": y_proba,
-        "metrics": metrics,
-        "shap_explainer": explainer,
-        "shap_results": shap_results,
-        "customer_explanation": customer_explanation,
-    }
+            print(
+                f"SHAP explanation generated for customer "
+                f"index {customer_index}."
+            )
+
+        # ==============================================================
+        # 13. MLflow run information
+        # ==============================================================
+
+        print("\n" + "=" * 70)
+        print("MLflow tracking completed")
+        print("=" * 70)
+
+        print(f"Run ID: {mlflow.active_run().info.run_id}")
+        print("Experiment: churn_prediction")
+
+        # ==============================================================
+        # 14. Return artifacts
+        # ==============================================================
+
+        print("\n" + "=" * 70)
+        print("Pipeline completed successfully")
+        print("=" * 70)
+
+        return {
+            "model": model,
+            "preprocessor": preprocessor,
+            "selector": selector,
+            "best_params": best_params,
+            "best_score": best_score,
+            "study": study,
+            "X_test": X_test_selected,
+            "y_test": y_test,
+            "y_pred": y_pred,
+            "y_proba": y_proba,
+            "metrics": metrics,
+            "shap_explainer": explainer,
+            "shap_results": shap_results,
+            "customer_explanation": customer_explanation,
+        }
 
 
 if __name__ == "__main__":
