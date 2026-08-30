@@ -1,5 +1,10 @@
 import mlflow
 
+
 EXPERIMENT_NAME = "churn_prediction"
 
-mlflow.set_experiment(EXPERIMENT_NAME)
+
+def setup_mlflow() -> None:
+    """Configure the MLflow experiment."""
+
+    mlflow.set_experiment(EXPERIMENT_NAME)

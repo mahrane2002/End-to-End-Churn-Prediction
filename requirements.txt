@@ -12,3 +12,4 @@ shap
 xgboost
 pytest 
 mlflow
+optuna
