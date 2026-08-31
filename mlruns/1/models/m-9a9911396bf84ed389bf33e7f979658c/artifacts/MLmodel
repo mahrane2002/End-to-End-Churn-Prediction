@@ -1,0 +1,22 @@
+artifact_path: file:C:/Users/riahi/Desktop/end-to-end-churn-prediction/mlruns/1/models/m-9a9911396bf84ed389bf33e7f979658c/artifacts
+flavors:
+  python_function:
+    data: model.ubj
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.xgboost
+    python_version: 3.13.2
+  xgboost:
+    code: null
+    data: model.ubj
+    model_class: xgboost.sklearn.XGBClassifier
+    model_format: ubj
+    xgb_version: 3.4.0
+mlflow_version: 3.15.2
+model_id: m-9a9911396bf84ed389bf33e7f979658c
+model_size_bytes: 354557
+model_uuid: m-9a9911396bf84ed389bf33e7f979658c
+prompts: null
+run_id: c89a63b2a8a14fe68ac88594b0a9ff89
+utc_time_created: '2026-08-31 12:17:44.361323'

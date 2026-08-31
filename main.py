@@ -67,7 +67,7 @@ def main(customer_index: int | None = None) -> dict:
             "target_column": TARGET_COLUMN,
             "test_size": TEST_SIZE,
             "random_state": RANDOM_STATE,
-            "n_trials": 50,
+            "n_trials": 100,
             "dataset_rows": df.shape[0],
             "dataset_columns": df.shape[1],
         })
@@ -182,7 +182,7 @@ def main(customer_index: int | None = None) -> dict:
         best_params, best_score, study = tune_model(
             X_train=X_train,
             y_train=y_train,
-            n_trials=50,
+            n_trials=100,
         )
 
         print("\nBest parameters:")
