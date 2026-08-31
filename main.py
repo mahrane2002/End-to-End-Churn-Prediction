@@ -43,7 +43,7 @@ def main(customer_index: int | None = None) -> dict:
 
     setup_mlflow()
 
-    with mlflow.start_run():
+    with mlflow.start_run(run_name="Run 2 - 100 trials"):
 
         print("=" * 70)
         print("MLflow run started")
