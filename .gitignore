@@ -24,3 +24,6 @@ artifacts/*
 data/processed/*
 !data/processed/.gitkeep
 
+# MLflow
+mlruns/
+mlflow.db
