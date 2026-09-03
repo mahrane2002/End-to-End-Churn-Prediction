@@ -92,3 +92,5 @@ SCORING_METRIC: str = "roc_auc"
 # Logical name of the best model selected after training
 MODEL_NAME: str = "best_model"
 
+SHAP_DIR = ARTIFACT_DIR / "shap"
+SHAP_BACKGROUND_PATH = SHAP_DIR / "background.pkl"

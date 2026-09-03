@@ -10,7 +10,8 @@ from src.config.config import (
     PREPROCESSOR_PATH,
     SELECTOR_PATH,
     METADATA_PATH,
-    INFERENCE_PIPELINE_PATH
+    INFERENCE_PIPELINE_PATH,
+    SHAP_BACKGROUND_PATH
 )
 
 
@@ -101,6 +102,40 @@ def load_inference_pipeline(
     if not path.exists():
         raise FileNotFoundError(
             f"No inference pipeline found at {path}"
+        )
+
+    return joblib.load(path)
+
+
+
+
+def save_shap_background(
+    background_data: Any,
+    path: Path = SHAP_BACKGROUND_PATH,
+) -> None:
+
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    joblib.dump(
+        background_data,
+        path,
+    )
+
+    print(
+        f"SHAP background saved to {path}"
+    )
+
+
+def load_shap_background(
+    path: Path = SHAP_BACKGROUND_PATH,
+) -> Any:
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"No SHAP background found at {path}"
         )
 
     return joblib.load(path)
