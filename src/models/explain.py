@@ -376,3 +376,92 @@ def explain_customer(
     print("=" * 70)
 
     return contributions
+
+
+def explain_prediction(
+    model,
+    explainer,
+    X_ready: pd.DataFrame,
+    top_k: int = 5,
+) -> list[dict]:
+
+    # Vérifier qu'on explique un seul client
+    if len(X_ready) != 1:
+        raise ValueError(
+            "X_ready must contain exactly one customer."
+        )
+
+    # ---------------------------------
+    # 1. Calculer la probabilité de churn
+    # ---------------------------------
+    churn_probability = float(
+        model.predict_proba(X_ready)[0, 1]
+    )
+
+    # ---------------------------------
+    # 2. Calculer les valeurs SHAP
+    # ---------------------------------
+    shap_explanation = explainer(X_ready)
+
+    shap_values = np.asarray(
+        shap_explanation.values
+    ).reshape(-1)
+
+    # ---------------------------------
+    # 3. Récupérer les valeurs des features
+    # ---------------------------------
+    feature_values = (
+        X_ready.iloc[0].to_numpy()
+    )
+
+    # ---------------------------------
+    # 4. Construire le tableau SHAP
+    # ---------------------------------
+    contributions = pd.DataFrame({
+        "feature": X_ready.columns,
+        "feature_value": feature_values,
+        "shap_value": shap_values,
+    })
+
+    # ---------------------------------
+    # 5. Importance absolue
+    # ---------------------------------
+    contributions["absolute_shap_value"] = (
+        contributions["shap_value"].abs()
+    )
+
+    # ---------------------------------
+    # 6. Direction de l'impact
+    # ---------------------------------
+    contributions["effect"] = np.where(
+        contributions["shap_value"] >= 0,
+        "increases_churn_probability",
+        "decreases_churn_probability",
+    )
+
+    # ---------------------------------
+    # 7. Trier par importance
+    # ---------------------------------
+    contributions = contributions.sort_values(
+        "absolute_shap_value",
+        ascending=False,
+    )
+
+    # ---------------------------------
+    # 8. Garder les top K
+    # ---------------------------------
+    top_features = contributions.head(top_k)
+
+    # ---------------------------------
+    # 9. Retourner une liste de dictionnaires
+    # ---------------------------------
+    return top_features[
+        [
+            "feature",
+            "feature_value",
+            "shap_value",
+            "effect",
+        ]
+    ].to_dict(
+        orient="records"
+    )

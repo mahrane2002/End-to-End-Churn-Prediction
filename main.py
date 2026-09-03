@@ -35,6 +35,7 @@ from src.utils.artifact_manager import (
     save_selector,
     save_metadata,
     save_inference_pipeline,
+    save_shap_background,
 )
 
 
@@ -397,7 +398,13 @@ def main(customer_index: int | None = None) -> dict:
             "selected_features": (
                 X_train_selected.columns.tolist()
             ),
-
+            "shap": {
+                "background_size": 200,
+                "top_k": 5,
+                "threshold": 0.5,
+            },
+            
+             
             "n_features": int(
                 X_train_selected.shape[1]
             ),
@@ -588,7 +595,16 @@ def main(customer_index: int | None = None) -> dict:
             model=model,
             background_data=X_train_selected,
         )
-
+        background_data = X_train_selected.sample(
+                n=min(200, len(X_train_selected)),
+                random_state=RANDOM_STATE,
+        )
+        save_shap_background(
+            background_data
+        )
+        
+        
+        
         shap_results = explain_global(
             explainer=explainer,
             X_test=X_test_selected,

@@ -43,3 +43,4 @@ class ExplanationResponse(BaseModel):
     churn: bool
     churn_probability: float
     top_features: list[FeatureExplanation]
+    explanation_method: str
