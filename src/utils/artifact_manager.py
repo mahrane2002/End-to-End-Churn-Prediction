@@ -10,6 +10,7 @@ from src.config.config import (
     PREPROCESSOR_PATH,
     SELECTOR_PATH,
     METADATA_PATH,
+    INFERENCE_PIPELINE_PATH
 )
 
 
@@ -69,3 +70,37 @@ def load_metadata(path: Path = METADATA_PATH) -> dict[str, Any]:
         raise FileNotFoundError(f"No metadata found at {path}")
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def save_inference_pipeline(
+    pipeline: Any,
+    path: Path = INFERENCE_PIPELINE_PATH,
+) -> None:
+    """Save the complete inference pipeline."""
+
+    path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    joblib.dump(
+        pipeline,
+        path,
+    )
+
+    print(
+        f"Inference pipeline saved to {path}"
+    )
+
+
+def load_inference_pipeline(
+    path: Path = INFERENCE_PIPELINE_PATH,
+) -> Any:
+    """Load the complete inference pipeline."""
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"No inference pipeline found at {path}"
+        )
+
+    return joblib.load(path)

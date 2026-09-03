@@ -49,6 +49,7 @@ PREPROCESSOR_PATH: Path = ARTIFACT_DIR / "preprocessor.pkl"
 THRESHOLD_PATH: Path = ARTIFACT_DIR / "threshold.json"
 SELECTOR_PATH: Path = ARTIFACT_DIR / "selector.pkl"
 METADATA_PATH: Path = ARTIFACT_DIR / "metadata.json"
+INFERENCE_PIPELINE_PATH = ARTIFACT_DIR / "inference_pipeline.pkl"
 
 
 # ==============================================================================
@@ -90,3 +91,4 @@ SCORING_METRIC: str = "roc_auc"
 
 # Logical name of the best model selected after training
 MODEL_NAME: str = "best_model"
+

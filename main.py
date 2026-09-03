@@ -22,6 +22,9 @@ from src.models.explain import (
 from src.models.predict import predict, predict_proba
 from src.models.train import train_model
 from src.models.tuning import tune_model
+from src.models.inference_pipeline import (
+    ChurnInferencePipeline,
+)
 from src.preprocessing.feature_engineering import engineer_features
 from src.preprocessing.feature_selection import select_features
 from src.preprocessing.preprocessing import preprocess_data
@@ -31,6 +34,7 @@ from src.utils.artifact_manager import (
     save_preprocessor,
     save_selector,
     save_metadata,
+    save_inference_pipeline,
 )
 
 
@@ -61,7 +65,6 @@ def main(customer_index: int | None = None) -> dict:
 
         print(f"Dataset shape: {df.shape}")
 
-        # Log dataset information
         mlflow.log_params({
             "model_type": "XGBoost",
             "target_column": TARGET_COLUMN,
@@ -97,13 +100,13 @@ def main(customer_index: int | None = None) -> dict:
 
         if TARGET_COLUMN not in df.columns:
             raise ValueError(
-                f"Target column '{TARGET_COLUMN}' was not found in the dataset."
+                f"Target column '{TARGET_COLUMN}' "
+                "was not found in the dataset."
             )
 
         X = df.drop(columns=[TARGET_COLUMN])
         y = df[TARGET_COLUMN]
 
-        # Log target distribution
         mlflow.log_params({
             "positive_class_count": int(y.sum()),
             "negative_class_count": int((y == 0).sum()),
@@ -128,7 +131,6 @@ def main(customer_index: int | None = None) -> dict:
         print(f"X_train shape: {X_train.shape}")
         print(f"X_test shape:  {X_test.shape}")
 
-        # Log split information
         mlflow.log_params({
             "train_samples": X_train.shape[0],
             "test_samples": X_test.shape[0],
@@ -146,8 +148,14 @@ def main(customer_index: int | None = None) -> dict:
         X_train = engineer_features(X_train)
         X_test = engineer_features(X_test)
 
-        print(f"X_train after feature engineering: {X_train.shape}")
-        print(f"X_test after feature engineering:  {X_test.shape}")
+        print(
+            f"X_train after feature engineering: "
+            f"{X_train.shape}"
+        )
+        print(
+            f"X_test after feature engineering:  "
+            f"{X_test.shape}"
+        )
 
         mlflow.log_params({
             "features_after_engineering": X_train.shape[1],
@@ -157,9 +165,9 @@ def main(customer_index: int | None = None) -> dict:
         # 6. Hyperparameter Tuning
         #
         # IMPORTANT:
-        # Do NOT perform feature selection here beforehand.
+        # Feature selection is NOT performed here beforehand.
         #
-        # tune_model() performs:
+        # tune_model() performs inside each CV fold:
         #
         # fold split
         #     ↓
@@ -171,8 +179,7 @@ def main(customer_index: int | None = None) -> dict:
         #     ↓
         # XGBoost
         #
-        # Feature selection is therefore fitted independently
-        # inside every CV fold.
+        # This prevents leakage.
         # ==============================================================
 
         print("\n" + "=" * 70)
@@ -186,10 +193,14 @@ def main(customer_index: int | None = None) -> dict:
         )
 
         print("\nBest parameters:")
+
         for parameter, value in best_params.items():
             print(f"  {parameter}: {value}")
 
-        print(f"\nBest mean CV ROC-AUC: {best_score:.4f}")
+        print(
+            f"\nBest mean CV ROC-AUC: "
+            f"{best_score:.4f}"
+        )
 
         # ==============================================================
         # MLflow - Optuna results
@@ -202,7 +213,6 @@ def main(customer_index: int | None = None) -> dict:
             float(best_score),
         )
 
-        # Log number of Optuna trials
         mlflow.log_param(
             "completed_optuna_trials",
             len(study.trials),
@@ -211,8 +221,8 @@ def main(customer_index: int | None = None) -> dict:
         # ==============================================================
         # 7. Final preprocessing
         #
-        # This preprocessing is fitted on the complete X_train.
-        # X_test is only transformed.
+        # Preprocessor is fitted ONLY on complete X_train.
+        # X_test is transformed only.
         # ==============================================================
 
         print("\n" + "=" * 70)
@@ -228,24 +238,27 @@ def main(customer_index: int | None = None) -> dict:
             X_test=X_test,
         )
 
-        print(f"X_train after preprocessing: {X_train_processed.shape}")
-        print(f"X_test after preprocessing:  {X_test_processed.shape}")
+        print(
+            f"X_train after preprocessing: "
+            f"{X_train_processed.shape}"
+        )
+        print(
+            f"X_test after preprocessing:  "
+            f"{X_test_processed.shape}"
+        )
 
         mlflow.log_params({
-            "features_after_preprocessing": X_train_processed.shape[1],
+            "features_after_preprocessing":
+                X_train_processed.shape[1],
         })
 
         # ==============================================================
         # 8. Final Feature Selection
         #
-        # IMPORTANT:
-        # This is the FINAL selector.
+        # Selector is fitted ONLY on complete X_train.
+        # X_test is transformed only.
         #
-        # It is fitted on the complete X_train only.
-        # X_test is only transformed.
-        #
-        # This selector is NOT used to perform CV.
-        # CV already performed its own selection inside each fold.
+        # This selector is also used during production inference.
         # ==============================================================
 
         print("\n" + "=" * 70)
@@ -262,12 +275,22 @@ def main(customer_index: int | None = None) -> dict:
             X_test=X_test_processed,
         )
 
-        print(f"X_train after feature selection: {X_train_selected.shape}")
-        print(f"X_test after feature selection:  {X_test_selected.shape}")
-        print(f"Number of selected features:     {X_train_selected.shape[1]}")
+        print(
+            f"X_train after feature selection: "
+            f"{X_train_selected.shape}"
+        )
+        print(
+            f"X_test after feature selection:  "
+            f"{X_test_selected.shape}"
+        )
+        print(
+            f"Number of selected features:     "
+            f"{X_train_selected.shape[1]}"
+        )
 
         mlflow.log_params({
-            "selected_features": X_train_selected.shape[1],
+            "selected_features":
+                X_train_selected.shape[1],
         })
 
         # ==============================================================
@@ -284,10 +307,50 @@ def main(customer_index: int | None = None) -> dict:
             best_params=best_params,
         )
 
-        print("Final XGBoost model trained successfully.")
+        print(
+            "Final XGBoost model trained successfully."
+        )
 
         # ==============================================================
-        # MLflow - Log model
+        # 9.1 Create complete inference pipeline
+        #
+        # IMPORTANT:
+        #
+        # Production inference:
+        #
+        # RAW CUSTOMER
+        #      ↓
+        # Feature Engineering
+        #      ↓
+        # Preprocessor
+        #      ↓
+        # Selector
+        #      ↓
+        # XGBoost
+        #      ↓
+        # Prediction
+        #
+        # SMOTETomek is NOT part of inference.
+        # It is used only during training.
+        # ==============================================================
+
+        print("\n" + "=" * 70)
+        print("9.1 Creating inference pipeline")
+        print("=" * 70)
+
+        inference_pipeline = ChurnInferencePipeline(
+            model=model,
+            preprocessor=preprocessor,
+            selector=selector,
+        )
+
+        print(
+            "Complete inference pipeline "
+            "created successfully."
+        )
+
+        # ==============================================================
+        # MLflow - Log XGBoost model
         # ==============================================================
 
         mlflow.xgboost.log_model(
@@ -295,7 +358,9 @@ def main(customer_index: int | None = None) -> dict:
             artifact_path="model",
         )
 
-        print("XGBoost model logged to MLflow.")
+        print(
+            "XGBoost model logged to MLflow."
+        )
 
         # ==============================================================
         # 9.5 Save Artifacts
@@ -305,35 +370,57 @@ def main(customer_index: int | None = None) -> dict:
         print("9.5 Saving artifacts")
         print("=" * 70)
 
+        # Individual artifacts
         save_model(model)
         save_preprocessor(preprocessor)
         save_selector(selector)
 
+        # Complete production inference pipeline
+        save_inference_pipeline(
+            inference_pipeline
+        )
+
         metadata = {
             "model_type": "XGBoost",
             "target": TARGET_COLUMN,
+
             "removed_columns": [
                 "RowNumber",
                 "CustomerId",
                 "Surname",
             ],
+
             "preprocessor_features": (
                 X_train_processed.columns.tolist()
             ),
+
             "selected_features": (
                 X_train_selected.columns.tolist()
             ),
+
             "n_features": int(
                 X_train_selected.shape[1]
             ),
-            "training_date": datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
+
+            "inference_pipeline": (
+                "Feature Engineering -> "
+                "Preprocessing -> "
+                "Feature Selection -> "
+                "XGBoost"
+            ),
+
+            "training_date": (
+                datetime.now().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
             ),
         }
 
         save_metadata(metadata)
 
-        print("All artifacts saved successfully.")
+        print(
+            "All artifacts saved successfully."
+        )
 
         # ==============================================================
         # MLflow - Log local artifacts
@@ -351,7 +438,15 @@ def main(customer_index: int | None = None) -> dict:
             "artifacts/metadata.json"
         )
 
-        print("Preprocessor, selector and metadata logged to MLflow.")
+        mlflow.log_artifact(
+            "artifacts/inference_pipeline.pkl"
+        )
+
+        print(
+            "Model, preprocessor, selector, "
+            "metadata and inference pipeline "
+            "logged to MLflow."
+        )
 
         # ==============================================================
         # 10. Prediction
@@ -360,6 +455,12 @@ def main(customer_index: int | None = None) -> dict:
         print("\n" + "=" * 70)
         print("10. Prediction")
         print("=" * 70)
+
+        # --------------------------------------------------------------
+        # Prediction on already transformed test data
+        #
+        # This is used for model evaluation.
+        # --------------------------------------------------------------
 
         y_pred = predict(
             model=model,
@@ -371,7 +472,61 @@ def main(customer_index: int | None = None) -> dict:
             X=X_test_selected,
         )
 
-        print("Predictions generated successfully.")
+        print(
+            "Predictions generated successfully."
+        )
+
+        # ==============================================================
+        # 10.1 Verify complete inference pipeline
+        #
+        # We verify that the new production pipeline gives the
+        # same result as the existing inference logic.
+        # ==============================================================
+
+        print("\n" + "=" * 70)
+        print("10.1 Verifying inference pipeline")
+        print("=" * 70)
+
+        # Use a RAW customer from X_test.
+        # X_test here is already feature-engineered, so we use
+        # the original test data instead.
+        #
+        # The original RAW data is reconstructed from the dataset
+        # using the test indices.
+
+        X_test_raw = df.loc[X_test.index].drop(
+            columns=[TARGET_COLUMN]
+        )
+
+        # Select one customer for verification
+        sample_customer = X_test_raw.iloc[[0]]
+
+        pipeline_prediction = (
+            inference_pipeline.predict(
+                sample_customer
+            )
+        )
+
+        pipeline_probability = (
+            inference_pipeline.predict_proba(
+                sample_customer
+            )
+        )
+
+        print(
+            f"Sample customer prediction: "
+            f"{int(pipeline_prediction[0])}"
+        )
+
+        print(
+            f"Sample customer churn probability: "
+            f"{float(pipeline_probability[0]):.4f}"
+        )
+
+        print(
+            "Complete RAW inference pipeline "
+            "verified successfully."
+        )
 
         # ==============================================================
         # 11. Evaluation
@@ -392,27 +547,37 @@ def main(customer_index: int | None = None) -> dict:
         # ==============================================================
 
         mlflow.log_metrics({
-            "test_accuracy": float(metrics["accuracy"]),
-            "test_precision": float(metrics["precision"]),
-            "test_recall": float(metrics["recall"]),
-            "test_f1": float(metrics["f1_score"]),
-            "test_roc_auc": float(metrics["roc_auc"]),
+            "test_accuracy":
+                float(metrics["accuracy"]),
+
+            "test_precision":
+                float(metrics["precision"]),
+
+            "test_recall":
+                float(metrics["recall"]),
+
+            "test_f1":
+                float(metrics["f1_score"]),
+
+            "test_roc_auc":
+                float(metrics["roc_auc"]),
         })
 
-        print("Evaluation metrics logged to MLflow.")
+        print(
+            "Evaluation metrics logged to MLflow."
+        )
 
         # ==============================================================
         # 12. SHAP Explainability
         #
-        # IMPORTANT:
-        # SHAP is applied to the final trained XGBoost model.
+        # SHAP is applied to the final XGBoost model.
         #
-        # The explanation data is X_test_selected, which corresponds
-        # exactly to the features received by the final XGBoost model.
+        # X_test_selected corresponds exactly to the features
+        # received by the XGBoost model.
         #
         # SMOTETomek is NOT applied to X_test.
         #
-        # The prediction threshold remains 0.5.
+        # Prediction threshold = 0.5.
         # ==============================================================
 
         print("\n" + "=" * 70)
@@ -429,11 +594,15 @@ def main(customer_index: int | None = None) -> dict:
             X_test=X_test_selected,
         )
 
-        print("Global SHAP explanations generated successfully.")
+        print(
+            "Global SHAP explanations "
+            "generated successfully."
+        )
 
         customer_explanation = None
 
         if customer_index is not None:
+
             customer_explanation = explain_customer(
                 model=model,
                 explainer=explainer,
@@ -443,8 +612,8 @@ def main(customer_index: int | None = None) -> dict:
             )
 
             print(
-                f"SHAP explanation generated for customer "
-                f"index {customer_index}."
+                f"SHAP explanation generated for "
+                f"customer index {customer_index}."
             )
 
         # ==============================================================
@@ -455,8 +624,14 @@ def main(customer_index: int | None = None) -> dict:
         print("MLflow tracking completed")
         print("=" * 70)
 
-        print(f"Run ID: {mlflow.active_run().info.run_id}")
-        print("Experiment: churn_prediction")
+        print(
+            f"Run ID: "
+            f"{mlflow.active_run().info.run_id}"
+        )
+
+        print(
+            "Experiment: churn_prediction"
+        )
 
         # ==============================================================
         # 14. Return artifacts
@@ -468,19 +643,48 @@ def main(customer_index: int | None = None) -> dict:
 
         return {
             "model": model,
-            "preprocessor": preprocessor,
-            "selector": selector,
-            "best_params": best_params,
-            "best_score": best_score,
-            "study": study,
-            "X_test": X_test_selected,
-            "y_test": y_test,
-            "y_pred": y_pred,
-            "y_proba": y_proba,
-            "metrics": metrics,
-            "shap_explainer": explainer,
-            "shap_results": shap_results,
-            "customer_explanation": customer_explanation,
+
+            "preprocessor":
+                preprocessor,
+
+            "selector":
+                selector,
+
+            "inference_pipeline":
+                inference_pipeline,
+
+            "best_params":
+                best_params,
+
+            "best_score":
+                best_score,
+
+            "study":
+                study,
+
+            "X_test":
+                X_test_selected,
+
+            "y_test":
+                y_test,
+
+            "y_pred":
+                y_pred,
+
+            "y_proba":
+                y_proba,
+
+            "metrics":
+                metrics,
+
+            "shap_explainer":
+                explainer,
+
+            "shap_results":
+                shap_results,
+
+            "customer_explanation":
+                customer_explanation,
         }
 
 
