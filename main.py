@@ -590,21 +590,18 @@ def main(customer_index: int | None = None) -> dict:
         print("\n" + "=" * 70)
         print("12. SHAP explainability")
         print("=" * 70)
-
+        background_data = X_train_selected.sample(
+                        n=min(200, len(X_train_selected)),
+                        random_state=RANDOM_STATE,
+                )
+        save_shap_background(
+                    background_data
+                )
         explainer = create_tree_explainer(
             model=model,
             background_data=X_train_selected,
         )
-        background_data = X_train_selected.sample(
-                n=min(200, len(X_train_selected)),
-                random_state=RANDOM_STATE,
-        )
-        save_shap_background(
-            background_data
-        )
-        
-        
-        
+
         shap_results = explain_global(
             explainer=explainer,
             X_test=X_test_selected,

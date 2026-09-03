@@ -3,10 +3,17 @@ from contextlib import asynccontextmanager
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 
-from api.schemas import CustomerRequest,ExplanationResponse
-from models.explain import create_tree_explainer
-from src.utils.artifact_manager import load_inference_pipeline, load_shap_background
-from src.models.explain import explain_prediction
+from api.schemas import CustomerRequest, ExplanationResponse
+
+from src.models.explain import (
+    create_tree_explainer,
+    explain_prediction,
+)
+
+from src.utils.artifact_manager import (
+    load_inference_pipeline,
+    load_shap_background,
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
