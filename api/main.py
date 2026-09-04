@@ -1,9 +1,14 @@
+
 from contextlib import asynccontextmanager
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 
-from api.schemas import CustomerRequest, ExplanationResponse
+from api.schemas import (
+    CustomerRequest,
+    PredictionResponse,
+    ExplanationResponse,
+)
 
 from src.models.explain import (
     create_tree_explainer,
@@ -15,8 +20,12 @@ from src.utils.artifact_manager import (
     load_shap_background,
 )
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    Load all ML dependencies when the API starts.
+    """
 
     print("Loading inference pipeline...")
 
@@ -33,6 +42,7 @@ async def lifespan(app: FastAPI):
         background_data=background,
     )
 
+    # Store dependencies in application state
     app.state.pipeline = pipeline
     app.state.shap_explainer = explainer
 
@@ -46,7 +56,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Customer Churn Prediction API",
-    description="API for customer churn prediction",
+    description=(
+        "Production-ready API for customer churn prediction "
+        "with SHAP-based explanations."
+    ),
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -54,51 +67,89 @@ app = FastAPI(
 
 @app.get("/health")
 def health():
+    """
+    Health check endpoint.
+    """
 
     return {
-        "status": "healthy"
+        "status": "healthy",
     }
 
 
-@app.post("/predict")
-def predict_customer(customer: CustomerRequest):
+@app.post(
+    "/predict",
+    response_model=PredictionResponse,
+)
+def predict_customer(
+    customer: CustomerRequest,
+):
+    """
+    Predict customer churn probability.
+    """
 
     try:
+        # --------------------------------------------------
+        # 1. Convert Pydantic request to dictionary
+        # --------------------------------------------------
 
-        # Convert Pydantic object to dictionary
         customer_data = customer.model_dump()
 
-        # Convert dictionary to DataFrame
+        # --------------------------------------------------
+        # 2. Convert dictionary to DataFrame
+        # --------------------------------------------------
+
         customer_df = pd.DataFrame(
             [customer_data]
         )
 
-        # Get inference pipeline
+        # --------------------------------------------------
+        # 3. Retrieve inference pipeline
+        # --------------------------------------------------
+
         pipeline = app.state.pipeline
 
-        # Prediction
+        # --------------------------------------------------
+        # 4. Prediction
+        # --------------------------------------------------
+
         prediction = pipeline.predict(
             customer_df
         )
 
-        # Probability
+        # --------------------------------------------------
+        # 5. Churn probability
+        # --------------------------------------------------
+
         probability = pipeline.predict_proba(
             customer_df
         )
 
+        churn_probability = float(
+            probability[0]
+        )
+
+        prediction_value = int(
+            prediction[0]
+        )
+
+        # --------------------------------------------------
+        # 6. Response
+        # --------------------------------------------------
+
         return {
-            "prediction": int(prediction[0]),
-            "churn_probability": float(
-                probability[0]
-            ),
+            "prediction": prediction_value,
+            "churn": bool(prediction_value),
+            "churn_probability": churn_probability,
         }
 
     except Exception as e:
 
         raise HTTPException(
             status_code=500,
-            detail=str(e),
-        )
+            detail="Prediction failed.",
+        ) from e
+
+
 @app.post(
     "/explain",
     response_model=ExplanationResponse,
@@ -106,8 +157,15 @@ def predict_customer(customer: CustomerRequest):
 def explain_customer_endpoint(
     customer: CustomerRequest,
 ):
+    """
+    Predict customer churn and explain the prediction
+    using SHAP.
+    """
 
     try:
+        # --------------------------------------------------
+        # 1. Convert request to DataFrame
+        # --------------------------------------------------
 
         customer_data = customer.model_dump()
 
@@ -115,15 +173,35 @@ def explain_customer_endpoint(
             [customer_data]
         )
 
+        # --------------------------------------------------
+        # 2. Retrieve dependencies
+        # --------------------------------------------------
+
         pipeline = app.state.pipeline
         explainer = app.state.shap_explainer
 
-        # Raw → engineered → preprocessed → selected
+        # --------------------------------------------------
+        # 3. Transform raw customer data
+        #
+        # Raw
+        #   ↓
+        # Feature Engineering
+        #   ↓
+        # Preprocessing
+        #   ↓
+        # Feature Selection
+        #   ↓
+        # X_ready
+        # --------------------------------------------------
+
         X_ready = pipeline.transform(
             customer_df
         )
 
-        # SHAP explanation
+        # --------------------------------------------------
+        # 4. SHAP explanation
+        # --------------------------------------------------
+
         top_features = explain_prediction(
             model=pipeline.model,
             explainer=explainer,
@@ -133,15 +211,27 @@ def explain_customer_endpoint(
             threshold=0.5,
         )
 
+        # --------------------------------------------------
+        # 5. Prediction probability
+        # --------------------------------------------------
+
         probability = float(
             pipeline.model.predict_proba(
                 X_ready
             )[0, 1]
         )
 
+        # --------------------------------------------------
+        # 6. Prediction using threshold = 0.5
+        # --------------------------------------------------
+
         prediction = int(
             probability >= 0.5
         )
+
+        # --------------------------------------------------
+        # 7. Response
+        # --------------------------------------------------
 
         return {
             "prediction": prediction,
@@ -155,5 +245,6 @@ def explain_customer_endpoint(
 
         raise HTTPException(
             status_code=500,
-            detail=str(e),
-        )
+            detail="Explanation failed.",
+        ) from e
+
