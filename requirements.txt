@@ -5,13 +5,8 @@ imbalanced-learn
 category-encoders
 feature-engine
 scipy
-matplotlib
-seaborn
 joblib
 shap 
 xgboost
-pytest 
-mlflow
-optuna
 fastapi
 uvicorn
