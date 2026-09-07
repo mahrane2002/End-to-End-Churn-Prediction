@@ -10,3 +10,5 @@ shap
 xgboost
 fastapi
 uvicorn
+matplotlib
+seaborn
