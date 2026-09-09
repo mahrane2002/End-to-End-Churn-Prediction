@@ -927,7 +927,7 @@ Possible extensions include:
 
 ## Author
 
-**Mahrane Riahi**
+**Mahrane Riahi---**
 
 Data Science and Machine Learning Engineering
 
