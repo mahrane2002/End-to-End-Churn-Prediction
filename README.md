@@ -931,8 +931,6 @@ Possible extensions include:
 
 Data Science and Machine Learning Engineering
 
-GitHub:
-https://github.com/mahrane2002
 
 ## License
 
