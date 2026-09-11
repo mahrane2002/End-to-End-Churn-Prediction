@@ -929,7 +929,6 @@ Possible extensions include:
 
 **Mahrane Riahi---**
 
-Data Science and Machine Learning Engineering
 
 
 ## License
