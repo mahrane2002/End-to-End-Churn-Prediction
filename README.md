@@ -925,9 +925,6 @@ Possible extensions include:
 * Model registry integration
 * Advanced observability and logging
 
-## Author
-
-**Mahrane Riahi---**
 
 
 
