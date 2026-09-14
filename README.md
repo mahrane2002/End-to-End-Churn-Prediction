@@ -916,7 +916,6 @@ Possible extensions include:
 * CI/CD with GitHub Actions
 * Model monitoring
 * Data drift detection
-* Model performance monitoring
 * Centralized MLflow tracking
 * Remote artifact storage
 * API authentication
@@ -924,9 +923,6 @@ Possible extensions include:
 * Automated model retraining
 * Model registry integration
 * Advanced observability and logging
-
-
-
 
 ## License
 
